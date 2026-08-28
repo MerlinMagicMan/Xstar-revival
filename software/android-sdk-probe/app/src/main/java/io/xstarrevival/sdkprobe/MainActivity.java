@@ -44,6 +44,12 @@ public final class MainActivity extends AppCompatActivity {
         line("READ-ONLY / PROPS-OFF BENCH MODE");
         line("");
         line("SDK auth: " + app().getAuthStatus());
+        line("");
+        line("PASSIVE USB INVENTORY");
+        for (String usbLine : UsbInventory.describe(this)) {
+            line(usbLine);
+        }
+        line("");
         line("Waiting for product connection…");
 
         Autel.setProductConnectListener(new ProductConnectListener() {
