@@ -61,6 +61,12 @@ Values whose SDK unit is not established remain unknown rather than being guesse
 
 The standalone module pins its own Kotlin plugin and repositories, so its safety and normalization tests can run independently with `gradle test`.
 
+## Deterministic passive capture
+
+`H264CaptureWriter` stores untouched receive-only callback payloads behind hard duration and byte ceilings. It can retain bounded, clearly standard Annex-B SPS/PPS setup before the first SDK-marked keyframe; opaque or picture payloads before synchronization are not guessed. Its JSONL index records offsets, valid lengths, keyframe/configuration flags, monotonic elapsed time, and the raw SDK timestamp with source-defined units.
+
+`SanitizedTelemetryCaptureWriter` produces a deterministic normalized-state JSONL companion. Its allowlist excludes position coordinates, opaque controller fields, identifiers, app keys, warning messages, and diagnostic notes. Neither writer has a transport write or aircraft-control path.
+
 ## Independent MAVLink decoder
 
 `StandardMavlinkDecoder` incrementally reassembles MAVLink v1/v2 frames from arbitrary transport chunks. It only maps CRC-verified standard messages whose fields have a direct normalized meaning:

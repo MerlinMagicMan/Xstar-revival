@@ -1,7 +1,22 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 val defaultAutelAar = rootProject.file("../android-sdk-probe/app/libs/autel-sdk-release.aar")
@@ -14,6 +29,7 @@ val autelAppKey = providers.gradleProperty("AUTEL_APP_KEY")
     .orElse(providers.environmentVariable("AUTEL_APP_KEY"))
     .getOrElse("")
 val escapedAutelAppKey = autelAppKey.replace("\\", "\\\\").replace("\"", "\\\"")
+val autelSdkSha256 = if (autelSdkEnabled) sha256(autelSdkAar) else ""
 
 android {
     namespace = "io.xstarrevival.app"
@@ -27,6 +43,7 @@ android {
         versionName = "0.1.0"
         buildConfigField("boolean", "AUTEL_SDK_AVAILABLE", autelSdkEnabled.toString())
         buildConfigField("String", "AUTEL_APP_KEY", "\"$escapedAutelAppKey\"")
+        buildConfigField("String", "AUTEL_SDK_SHA256", "\"$autelSdkSha256\"")
     }
 
     buildFeatures {
@@ -54,6 +71,7 @@ dependencies {
 
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")

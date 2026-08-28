@@ -1,5 +1,7 @@
 package io.xstarrevival.app
 
+import android.content.ClipData
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,12 +19,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.FileProvider
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayStatus
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,6 +39,7 @@ class MainActivity : ComponentActivity() {
                 val platformName by vm.platformName.collectAsStateWithLifecycle()
                 val replayState by vm.replayState.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
+                val benchCapture by vm.benchCapture.collectAsStateWithLifecycle()
 
                 XStarApp(
                     state = state,
@@ -43,6 +48,8 @@ class MainActivity : ComponentActivity() {
                     platformName = platformName,
                     replayState = replayState,
                     heartbeat = heartbeat,
+                    liveReadiness = vm.liveReadiness,
+                    benchCapture = benchCapture,
                     liveVideoFrames = vm.liveVideoFrames,
                     onSourceSelected = vm::selectSource,
                     onConnect = vm::connect,
@@ -51,10 +58,26 @@ class MainActivity : ComponentActivity() {
                     onPlayReplay = vm::playReplay,
                     onPauseReplay = vm::pauseReplay,
                     onRestartReplay = vm::restartReplay,
-                    onReplaySpeedChanged = vm::setReplaySpeed
+                    onReplaySpeedChanged = vm::setReplaySpeed,
+                    onStartBenchCapture = vm::startBenchCapture,
+                    onStopBenchCapture = vm::stopBenchCapture,
+                    onShareBenchCapture = ::shareBenchCapture
                 )
             }
         }
+    }
+
+    private fun shareBenchCapture(path: String) {
+        val archive = File(path)
+        if (!archive.isFile) return
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", archive)
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri("X-Star bench capture", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(share, "Share passive X-Star capture"))
     }
 }
 
@@ -71,6 +94,8 @@ private fun XStarApp(
     platformName: String,
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
+    liveReadiness: LiveReadinessUiState,
+    benchCapture: BenchCaptureUiState,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSourceSelected: (TelemetrySource) -> Unit,
     onConnect: () -> Unit,
@@ -79,9 +104,13 @@ private fun XStarApp(
     onPlayReplay: () -> Unit,
     onPauseReplay: () -> Unit,
     onRestartReplay: () -> Unit,
-    onReplaySpeedChanged: (Double) -> Unit
+    onReplaySpeedChanged: (Double) -> Unit,
+    onStartBenchCapture: () -> Unit,
+    onStopBenchCapture: () -> Unit,
+    onShareBenchCapture: (String) -> Unit
 ) {
     var selectedView by rememberSaveable { mutableStateOf(AppView.DASHBOARD) }
+    var benchReplayVideoPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -130,6 +159,25 @@ private fun XStarApp(
                     onSpeedChanged = onReplaySpeedChanged
                 )
             }
+            if (source == TelemetrySource.OFFICIAL_AUTEL) {
+                BenchCaptureControls(
+                    connection = state.connection,
+                    readiness = liveReadiness,
+                    capture = benchCapture,
+                    replayActive = benchReplayVideoPath != null,
+                    onStart = {
+                        benchReplayVideoPath = null
+                        onStartBenchCapture()
+                    },
+                    onStop = onStopBenchCapture,
+                    onShare = onShareBenchCapture,
+                    onReplay = { path ->
+                        benchReplayVideoPath = path
+                        selectedView = AppView.COCKPIT
+                    },
+                    onReturnLive = { benchReplayVideoPath = null }
+                )
+            }
         }
 
         HorizontalDivider()
@@ -148,10 +196,90 @@ private fun XStarApp(
                 replayState = replayState,
                 heartbeat = heartbeat,
                 liveVideoFrames = liveVideoFrames,
+                benchReplayVideoPath = benchReplayVideoPath,
                 modifier = Modifier.weight(1f)
             )
         }
     }
+}
+
+@Composable
+private fun BenchCaptureControls(
+    connection: ConnectionState,
+    readiness: LiveReadinessUiState,
+    capture: BenchCaptureUiState,
+    replayActive: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onShare: (String) -> Unit,
+    onReplay: (String) -> Unit,
+    onReturnLive: () -> Unit
+) {
+    var propsRemoved by rememberSaveable { mutableStateOf(false) }
+    val connected = connection is ConnectionState.Connected
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Passive bench capture", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "SDK ${readiness.sdkIncluded.readyLabel()} · App key ${readiness.appKeyConfigured.readyLabel()} · Product ${connected.readyLabel()}",
+                style = MaterialTheme.typography.labelMedium
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = propsRemoved, onCheckedChange = { propsRemoved = it })
+                Text("I removed the propellers for powered bench testing.", style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                when (capture.status) {
+                    BenchCaptureStatus.IDLE -> "Ready for a bounded camera-stream capture."
+                    BenchCaptureStatus.WAITING_FOR_KEYFRAME -> "Waiting for the next H.264 keyframe…"
+                    BenchCaptureStatus.RECORDING ->
+                        "Recording ${capture.framesWritten} frames · ${capture.bytesWritten.formatBytes()} · ${capture.elapsedMs / 1000}s"
+                    BenchCaptureStatus.COMPLETE ->
+                        "Capture complete · ${capture.framesWritten} frames · ${capture.telemetrySamples} telemetry samples · ${capture.bytesWritten.formatBytes()}"
+                    BenchCaptureStatus.ERROR -> "Capture error · ${capture.error ?: "unknown"}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (capture.status == BenchCaptureStatus.ERROR) MaterialTheme.colorScheme.error else LocalContentColor.current
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (capture.active) {
+                    Button(onClick = onStop) { Text("Stop capture") }
+                } else {
+                    Button(
+                        onClick = onStart,
+                        enabled = propsRemoved && readiness.sdkIncluded && readiness.appKeyConfigured && connected
+                    ) { Text("Capture 30 seconds") }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                capture.archivePath?.let { archive ->
+                    OutlinedButton(onClick = { onShare(archive) }) { Text("Share ZIP") }
+                }
+                capture.videoPath?.let { video ->
+                    if (replayActive) {
+                        OutlinedButton(onClick = onReturnLive) { Text("Return live") }
+                    } else {
+                        OutlinedButton(onClick = { onReplay(video) }) { Text("Replay locally") }
+                    }
+                }
+            }
+            Text(
+                "Limited to 30 seconds or 64 MB. The ZIP contains received video, frame timing, and redacted telemetry—not the app key, serial number, or GPS location. Camera imagery may still be sensitive.",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+private fun Boolean.readyLabel(): String = if (this) "READY" else "MISSING"
+
+private fun Long.formatBytes(): String = when {
+    this >= 1024L * 1024L -> "%.1f MB".format(this / (1024.0 * 1024.0))
+    this >= 1024L -> "%.1f KB".format(this / 1024.0)
+    else -> "$this B"
 }
 
 @Composable

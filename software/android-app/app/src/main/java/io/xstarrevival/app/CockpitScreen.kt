@@ -46,6 +46,7 @@ fun CockpitScreen(
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
     liveVideoFrames: Flow<H264VideoFrame>,
+    benchReplayVideoPath: String?,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -54,7 +55,7 @@ fun CockpitScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        CockpitViewport(state, source, replayState, heartbeat, liveVideoFrames)
+        CockpitViewport(state, source, replayState, heartbeat, liveVideoFrames, benchReplayVideoPath)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CockpitStatusCard(
                 title = "LINK",
@@ -95,7 +96,8 @@ private fun CockpitViewport(
     source: TelemetrySource,
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
-    liveVideoFrames: Flow<H264VideoFrame>
+    liveVideoFrames: Flow<H264VideoFrame>,
+    benchReplayVideoPath: String?
 ) {
     var videoReplay by remember { mutableStateOf(VideoReplayUiState()) }
     var liveVideo by remember { mutableStateOf(LiveVideoUiState()) }
@@ -113,11 +115,19 @@ private fun CockpitViewport(
                     modifier = Modifier.fillMaxSize(),
                     onStateChanged = { videoReplay = it }
                 )
-            TelemetrySource.OFFICIAL_AUTEL -> H264LiveVideo(
-                    frames = liveVideoFrames,
+            TelemetrySource.OFFICIAL_AUTEL -> if (benchReplayVideoPath != null) {
+                H264CapturedVideo(
+                    videoPath = benchReplayVideoPath,
                     modifier = Modifier.fillMaxSize(),
-                    onStateChanged = { liveVideo = it }
+                    onStateChanged = { videoReplay = it }
                 )
+            } else {
+                H264LiveVideo(
+                        frames = liveVideoFrames,
+                        modifier = Modifier.fillMaxSize(),
+                        onStateChanged = { liveVideo = it }
+                    )
+            }
             TelemetrySource.MOCK -> ArtificialHorizon(
                     rollDeg = state.attitude.rollDeg ?: 0.0,
                     pitchDeg = state.attitude.pitchDeg ?: 0.0,
@@ -180,7 +190,11 @@ private fun CockpitViewport(
                 when (source) {
                     TelemetrySource.MAVLINK_REPLAY ->
                         "REPLAY ${replayState.status.name} · ${(replayState.progress * 100).roundToInt()}%"
-                    TelemetrySource.OFFICIAL_AUTEL -> "LIVE X-STAR · RECEIVE ONLY"
+                    TelemetrySource.OFFICIAL_AUTEL -> if (benchReplayVideoPath == null) {
+                        "LIVE X-STAR · RECEIVE ONLY"
+                    } else {
+                        "LOCAL BENCH REPLAY · RECEIVE ONLY"
+                    }
                     TelemetrySource.MOCK -> "MOCK TELEMETRY"
                 },
                 color = HudGreen,
@@ -191,6 +205,14 @@ private fun CockpitViewport(
             Text(
                 when {
                     source == TelemetrySource.MOCK -> "SYNTHETIC VIEW · NO CAMERA FRAMES"
+                    source == TelemetrySource.OFFICIAL_AUTEL && benchReplayVideoPath != null &&
+                        videoReplay.status == VideoReplayStatus.ERROR ->
+                        "CAPTURE REPLAY ERROR · ${videoReplay.error ?: "UNKNOWN"}"
+                    source == TelemetrySource.OFFICIAL_AUTEL && benchReplayVideoPath != null &&
+                        videoReplay.status == VideoReplayStatus.PLAYING ->
+                        "CAPTURED H.264 · ${videoReplay.framesRendered}/${videoReplay.frameCount} · LOOP ${videoReplay.loopCount}"
+                    source == TelemetrySource.OFFICIAL_AUTEL && benchReplayVideoPath != null ->
+                        "CAPTURED H.264 · WAITING FOR DECODER"
                     source == TelemetrySource.OFFICIAL_AUTEL && liveVideo.status == LiveVideoStatus.ERROR ->
                         "LIVE AVC ERROR · ${liveVideo.error ?: "UNKNOWN"}"
                     source == TelemetrySource.OFFICIAL_AUTEL && liveVideo.status == LiveVideoStatus.PLAYING ->

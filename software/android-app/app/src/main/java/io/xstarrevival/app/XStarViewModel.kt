@@ -9,12 +9,14 @@ import io.xstarrevival.core.adapter.AutelSdkBridge
 import io.xstarrevival.core.adapter.AutelSdkPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.mock.MockXStarPlatform
+import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.protocol.mavlink.StandardMavlinkDecoder
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
 import io.xstarrevival.core.video.H264VideoFrame
+import io.xstarrevival.core.video.H264CaptureStopReason
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -38,6 +40,11 @@ data class HeartbeatUiState(
     val stale: Boolean = false
 )
 
+data class LiveReadinessUiState(
+    val sdkIncluded: Boolean,
+    val appKeyConfigured: Boolean
+)
+
 class XStarViewModel(application: Application) : AndroidViewModel(application) {
     private val mockPlatform = MockXStarPlatform(viewModelScope)
     private val replayTransport = CaptureReplayTransport(
@@ -58,12 +65,25 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         if (officialPlatform != null) add(TelemetrySource.OFFICIAL_AUTEL)
     }
     val liveVideoFrames: Flow<H264VideoFrame> = officialPlatform?.h264Frames ?: emptyFlow()
+    val liveReadiness = LiveReadinessUiState(
+        sdkIncluded = BuildConfig.AUTEL_SDK_AVAILABLE,
+        appKeyConfigured = BuildConfig.AUTEL_APP_KEY.isNotBlank()
+    )
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
 
     private val mutableState = MutableStateFlow(XStarState())
     val state: StateFlow<XStarState> = mutableState.asStateFlow()
+    private val benchCaptureManager = BenchH264CaptureManager(
+        application,
+        viewModelScope,
+        liveVideoFrames,
+        state,
+        BuildConfig.VERSION_NAME,
+        BuildConfig.AUTEL_SDK_SHA256
+    )
+    val benchCapture: StateFlow<BenchCaptureUiState> = benchCaptureManager.state
 
     private val mutableSource = MutableStateFlow(TelemetrySource.MOCK)
     val source: StateFlow<TelemetrySource> = mutableSource.asStateFlow()
@@ -93,6 +113,9 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         if (value == mutableSource.value) return
         if (value == TelemetrySource.OFFICIAL_AUTEL && officialPlatform == null) return
         viewModelScope.launch {
+            if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
+                benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
+            }
             activePlatform.disconnect()
             mutableSource.value = value
             activePlatform = when (value) {
@@ -114,6 +137,9 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect() {
         viewModelScope.launch {
+            if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
+                benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
+            }
             activePlatform.disconnect()
             resetHeartbeat()
         }
@@ -139,6 +165,16 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setReplaySpeed(speed: Double) = replayTransport.setSpeed(speed)
+
+    fun startBenchCapture() {
+        val ready = mutableSource.value == TelemetrySource.OFFICIAL_AUTEL &&
+            BuildConfig.AUTEL_SDK_AVAILABLE &&
+            BuildConfig.AUTEL_APP_KEY.isNotBlank() &&
+            state.value.connection is ConnectionState.Connected
+        if (ready) benchCaptureManager.start()
+    }
+
+    fun stopBenchCapture() = benchCaptureManager.stop()
 
     private suspend fun connectActivePlatform() {
         runCatching { activePlatform.connect() }
@@ -196,6 +232,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
         replayTransport.pause()
         super.onCleared()
     }
