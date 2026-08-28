@@ -1,0 +1,15 @@
+# Local Autel SDK binary
+app/libs/*.aar
+!app/libs/README.md
+
+# Credentials / local Android config
+local.properties
+*.jks
+*.keystore
+
+# Build output
+.gradle/
+build/
+**/build/
+.idea/
+*.iml
