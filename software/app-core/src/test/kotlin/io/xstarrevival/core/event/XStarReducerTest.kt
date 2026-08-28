@@ -34,4 +34,5 @@ class XStarReducerTest {
         assertEquals(listOf("heartbeat detected"), state.diagnostics.notes)
         assertEquals(2L, state.diagnostics.lastUpdateEpochMs)
     }
+
 }

@@ -43,3 +43,14 @@ OpenXStarPlatform
 - diagnostics
 
 The mock implementation produces deterministic changing telemetry so UI and state handling can be developed without hardware.
+
+## Independent MAVLink decoder
+
+`StandardMavlinkDecoder` incrementally reassembles MAVLink v1/v2 frames from arbitrary transport chunks. It only maps CRC-verified standard messages whose fields have a direct normalized meaning:
+
+- `HEARTBEAT` (generic vehicle type and armed flag; custom flight mode stays unknown)
+- `GPS_RAW_INT` and `GLOBAL_POSITION_INT`
+- `ATTITUDE`
+- `SYS_STATUS` and primary-pack `BATTERY_STATUS`
+
+Unknown/custom messages remain opaque and are visible only through diagnostic counters. The decoder never emits protocol requests or flight-control writes, and `OpenXStarTransport` intentionally has no write method.

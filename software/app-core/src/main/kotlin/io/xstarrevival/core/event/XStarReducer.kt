@@ -7,6 +7,10 @@ object XStarReducer {
         val next = when (event) {
             is XStarEvent.ConnectionChanged -> state.copy(connection = event.value)
             is XStarEvent.ProductIdentified -> state.copy(
+                connection = when (val connection = state.connection) {
+                    is ConnectionState.Connected -> connection.copy(product = event.name)
+                    else -> connection
+                },
                 aircraft = state.aircraft.copy(
                     productName = event.name,
                     firmwareVersion = event.firmwareVersion
