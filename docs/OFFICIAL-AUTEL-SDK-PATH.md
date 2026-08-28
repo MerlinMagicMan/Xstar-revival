@@ -2,6 +2,8 @@
 
 ## Executive Finding
 
+The method-by-method inventory, evidence grades, and read/write safety classification are maintained in [`XSTAR-SDK-CAPABILITY-MATRIX.md`](XSTAR-SDK-CAPABILITY-MATRIX.md).
+
 The strongest research discovery to date is that Autel's own public Mobile SDK sample repository contains explicit, first-class code paths for both `X_STAR` and `PREMIUM` products.
 
 This changes the preferred development order.

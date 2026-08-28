@@ -56,6 +56,8 @@ OpenXStarPlatform
 
 when those adapters are ready.
 
+The official bridge's allowed observations and compile-time forbidden control calls are defined in the [X-Star SDK Capability Matrix](../../docs/XSTAR-SDK-CAPABILITY-MATRIX.md). Live SDK work must preserve that read-only boundary.
+
 ## Safety
 
 There are no flight controls in this application. Current actions are connect, disconnect and read-only refresh only.
