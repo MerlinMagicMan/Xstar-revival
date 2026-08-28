@@ -4,8 +4,6 @@ import io.xstarrevival.core.event.XStarEvent
 import io.xstarrevival.core.model.ConnectionState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -30,12 +28,17 @@ class OpenXStarPlatformAdapterTest {
         }
 
         val platform = OpenXStarPlatformAdapter(this, transport, decoder)
-        platform.connect()
-        advanceUntilIdle()
-        incoming.emit(byteArrayOf(1, 2, 3))
-        advanceUntilIdle()
+        try {
+            platform.connect()
+            advanceUntilIdle()
+            incoming.emit(byteArrayOf(1, 2, 3))
+            advanceUntilIdle()
 
-        assertEquals("X-Star Premium", platform.state.value.aircraft.productName)
-        assertEquals(ConnectionState.Connected("test-usb", null), platform.state.value.connection)
+            assertEquals("X-Star Premium", platform.state.value.aircraft.productName)
+            assertEquals(ConnectionState.Connected("test-usb", null), platform.state.value.connection)
+        } finally {
+            platform.disconnect()
+            advanceUntilIdle()
+        }
     }
 }
