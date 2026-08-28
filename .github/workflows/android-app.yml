@@ -1,0 +1,50 @@
+name: Android App
+
+on:
+  pull_request:
+    paths:
+      - 'software/android-app/**'
+      - 'software/app-core/**'
+      - '.github/workflows/android-app.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'software/android-app/**'
+      - 'software/app-core/**'
+      - '.github/workflows/android-app.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Test app core
+        working-directory: software/android-app
+        run: gradle :appCore:test --stacktrace
+
+      - name: Compile debug app
+        working-directory: software/android-app
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xstar-revival-debug
+          path: software/android-app/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
