@@ -8,6 +8,8 @@ data class XStarState(
     val attitude: AttitudeState = AttitudeState(),
     val remote: RemoteState = RemoteState(),
     val camera: CameraState = CameraState(),
+    val gimbal: GimbalState = GimbalState(),
+    val imageLink: ImageLinkState = ImageLinkState(),
     val warnings: List<WarningState> = emptyList(),
     val diagnostics: DiagnosticsState = DiagnosticsState()
 )
@@ -24,7 +26,8 @@ data class AircraftState(
     val productName: String? = null,
     val firmwareVersion: String? = null,
     val armed: Boolean? = null,
-    val flightMode: String? = null
+    val flightMode: String? = null,
+    val componentVersions: Map<String, String> = emptyMap()
 )
 
 data class BatteryState(
@@ -35,7 +38,9 @@ data class BatteryState(
     val designCapacityMah: Int? = null,
     val fullCapacityMah: Int? = null,
     val remainingCapacityMah: Int? = null,
-    val cells: List<CellState> = emptyList()
+    val cells: List<CellState> = emptyList(),
+    val dischargeCount: Int? = null,
+    val firmwareVersion: String? = null
 ) {
     val cellDeltaV: Double?
         get() = cells.mapNotNull { it.voltageV }.takeIf { it.size >= 2 }?.let { values ->
@@ -54,7 +59,8 @@ data class NavigationState(
     val gpsFix: String? = null,
     val altitudeM: Double? = null,
     val groundSpeedMps: Double? = null,
-    val verticalSpeedMps: Double? = null
+    val verticalSpeedMps: Double? = null,
+    val ultrasonicHeightM: Double? = null
 )
 
 data class AttitudeState(
@@ -66,14 +72,30 @@ data class AttitudeState(
 data class RemoteState(
     val connected: Boolean? = null,
     val signalPercent: Int? = null,
-    val batteryPercent: Int? = null
+    val batteryPercent: Int? = null,
+    val imageSignalPercent: Int? = null,
+    val opaqueControlMenu: List<Int>? = null
 )
 
 data class CameraState(
     val connected: Boolean? = null,
     val mode: String? = null,
     val recording: Boolean? = null,
+    val exposureMode: String? = null,
+    val iso: String? = null,
+    val shutter: String? = null,
     val video: VideoState = VideoState()
+)
+
+data class GimbalState(
+    val pitchDeg: Double? = null,
+    val status: String? = null
+)
+
+data class ImageLinkState(
+    val usbEnabled: Boolean? = null,
+    val rfFrequencyHz: Double? = null,
+    val rfSignalValue: Int? = null
 )
 
 data class VideoState(

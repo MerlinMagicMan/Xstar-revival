@@ -1,6 +1,6 @@
 package io.xstarrevival.core.adapter
 
-import io.xstarrevival.core.event.XStarEvent
+import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.Flow
  * and app-key/authentication path are available.
  */
 interface AutelSdkBridge {
-    val events: Flow<XStarEvent>
+    /** Hot callback streams owned by the Android SDK binding. */
+    val observations: Flow<AutelSdkObservation>
+    val videoFrames: Flow<H264VideoFrame>
     val description: String
 
     suspend fun initialize()

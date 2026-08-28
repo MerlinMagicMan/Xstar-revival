@@ -260,6 +260,7 @@ private fun DashboardScreen(
         NavigationCard(state)
         AttitudeCard(state)
         RemoteCard(state)
+        GimbalAndLinkCard(state)
         CameraCard(state)
         DiagnosticsCard(state)
     }
@@ -294,6 +295,10 @@ private fun BatteryCard(state: XStarState) = SectionCard("Battery") {
     Metric("Pack", state.battery.packVoltageV?.let { "%.3f V".format(it) })
     Metric("Current", state.battery.currentA?.let { "%.2f A".format(it) })
     Metric("Temperature", state.battery.temperatureC?.let { "%.1f °C".format(it) })
+    Metric("Remaining capacity", state.battery.remainingCapacityMah?.let { "$it mAh" })
+    Metric("Full capacity", state.battery.fullCapacityMah?.let { "$it mAh" })
+    Metric("Discharges", state.battery.dischargeCount?.toString())
+    Metric("Firmware", state.battery.firmwareVersion)
     Metric("Cell delta", state.battery.cellDeltaV?.let { "%.3f V".format(it) })
     if (state.battery.cells.isNotEmpty()) {
         Spacer(Modifier.height(4.dp))
@@ -308,6 +313,7 @@ private fun NavigationCard(state: XStarState) = SectionCard("Navigation") {
     Metric("GPS", state.navigation.gpsFix)
     Metric("Satellites", state.navigation.satellites?.toString())
     Metric("Altitude", state.navigation.altitudeM?.let { "%.1f m".format(it) })
+    Metric("Ultrasonic height", state.navigation.ultrasonicHeightM?.let { "%.2f m".format(it) })
     Metric("Ground speed", state.navigation.groundSpeedMps?.let { "%.1f m/s".format(it) })
     Metric("Vertical speed", state.navigation.verticalSpeedMps?.let { "%.1f m/s".format(it) })
 }
@@ -324,6 +330,16 @@ private fun RemoteCard(state: XStarState) = SectionCard("Remote") {
     Metric("Connected", state.remote.connected?.toString())
     Metric("Signal", state.remote.signalPercent?.let { "$it%" })
     Metric("Battery", state.remote.batteryPercent?.let { "$it%" })
+    Metric("Image link", state.remote.imageSignalPercent?.let { "$it%" })
+}
+
+@Composable
+private fun GimbalAndLinkCard(state: XStarState) = SectionCard("Gimbal / Image link") {
+    Metric("Gimbal pitch", state.gimbal.pitchDeg?.let { "%.1f°".format(it) })
+    Metric("Gimbal status", state.gimbal.status)
+    Metric("USB link", state.imageLink.usbEnabled?.let { if (it) "Enabled" else "Disabled" })
+    Metric("RF frequency", state.imageLink.rfFrequencyHz?.let { "%.3f MHz".format(it / 1_000_000.0) })
+    Metric("RF signal (raw)", state.imageLink.rfSignalValue?.toString())
 }
 
 @Composable
@@ -331,6 +347,9 @@ private fun CameraCard(state: XStarState) = SectionCard("Camera / FPV") {
     Metric("Camera", state.camera.connected?.let { if (it) "Connected" else "Disconnected" })
     Metric("Mode", state.camera.mode)
     Metric("Recording", state.camera.recording?.toString())
+    Metric("Exposure", state.camera.exposureMode)
+    Metric("ISO", state.camera.iso)
+    Metric("Shutter", state.camera.shutter)
     Metric("Video", if (state.camera.video.receiving) "Receiving" else "No stream")
     Metric("Codec", state.camera.video.codec)
     Metric(

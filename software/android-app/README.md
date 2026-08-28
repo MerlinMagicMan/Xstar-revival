@@ -58,6 +58,8 @@ when those adapters are ready.
 
 The official bridge's allowed observations and compile-time forbidden control calls are defined in the [X-Star SDK Capability Matrix](../../docs/XSTAR-SDK-CAPABILITY-MATRIX.md). Live SDK work must preserve that read-only boundary.
 
+App core now provides a typed `AutelSdkBridge` observation contract and `H264VideoSource`. The Android AAR binding can feed documented SDK callbacks into that seam without placing proprietary SDK types in the UI or domain model. The remaining hardware-specific step is implementing that binding against a locally supplied official AAR and authenticated app key.
+
 ## Safety
 
 There are no flight controls in this application. Current actions are connect, disconnect and read-only refresh only.
