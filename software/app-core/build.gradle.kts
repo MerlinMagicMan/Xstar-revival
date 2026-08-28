@@ -2,10 +2,6 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation(kotlin("test"))
