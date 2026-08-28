@@ -4,6 +4,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    plugins {
+        id("com.android.library") version "8.7.3"
+        id("org.jetbrains.kotlin.android") version "2.0.21"
+    }
 }
 
 dependencyResolutionManagement {
@@ -11,13 +15,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        flatDir { dirs("app/libs") }
     }
 }
 
-rootProject.name = "XStarOfficialSdkProbe"
-include(":app")
+rootProject.name = "xstar-android-autel-bridge"
 include(":appCore")
 project(":appCore").projectDir = file("../app-core")
-include(":autelBridge")
-project(":autelBridge").projectDir = file("../android-autel-bridge")

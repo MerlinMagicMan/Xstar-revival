@@ -30,7 +30,9 @@ import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayStatus
+import io.xstarrevival.core.video.H264VideoFrame
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.Flow
 
 private val HudGreen = Color(0xFF8CFFD0)
 private val HudAmber = Color(0xFFFFD166)
@@ -43,6 +45,7 @@ fun CockpitScreen(
     source: TelemetrySource,
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
+    liveVideoFrames: Flow<H264VideoFrame>,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -51,7 +54,7 @@ fun CockpitScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        CockpitViewport(state, source, replayState, heartbeat)
+        CockpitViewport(state, source, replayState, heartbeat, liveVideoFrames)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CockpitStatusCard(
                 title = "LINK",
@@ -68,12 +71,19 @@ fun CockpitScreen(
             )
             CockpitStatusCard(
                 title = "SOURCE",
-                value = if (source == TelemetrySource.MOCK) "MOCK" else "REPLAY",
+                value = when (source) {
+                    TelemetrySource.MOCK -> "MOCK"
+                    TelemetrySource.MAVLINK_REPLAY -> "REPLAY"
+                    TelemetrySource.OFFICIAL_AUTEL -> "LIVE"
+                },
                 modifier = Modifier.weight(1f)
             )
         }
         Text(
-            "The HUD is driven by normalized telemetry. The scene is synthetic until a validated camera transport and video decoder supply real FPV frames.",
+            if (source == TelemetrySource.OFFICIAL_AUTEL)
+                "Live mode is receive-only: official SDK telemetry and camera frames can enter this view, but no flight-control commands exist."
+            else
+                "The HUD is driven by normalized telemetry. Replay video is synthetic and clearly labeled.",
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -84,9 +94,11 @@ private fun CockpitViewport(
     state: XStarState,
     source: TelemetrySource,
     replayState: CaptureReplayState,
-    heartbeat: HeartbeatUiState
+    heartbeat: HeartbeatUiState,
+    liveVideoFrames: Flow<H264VideoFrame>
 ) {
     var videoReplay by remember { mutableStateOf(VideoReplayUiState()) }
+    var liveVideo by remember { mutableStateOf(LiveVideoUiState()) }
     val shape = RoundedCornerShape(18.dp)
     Box(
         modifier = Modifier
@@ -96,17 +108,21 @@ private fun CockpitViewport(
             .background(ViewportBlack)
             .border(1.dp, HudGreen.copy(alpha = 0.45f), shape)
     ) {
-        if (source == TelemetrySource.MAVLINK_REPLAY) {
-            H264ReplayVideo(
-                modifier = Modifier.fillMaxSize(),
-                onStateChanged = { videoReplay = it }
-            )
-        } else {
-            ArtificialHorizon(
-                rollDeg = state.attitude.rollDeg ?: 0.0,
-                pitchDeg = state.attitude.pitchDeg ?: 0.0,
-                modifier = Modifier.fillMaxSize()
-            )
+        when (source) {
+            TelemetrySource.MAVLINK_REPLAY -> H264ReplayVideo(
+                    modifier = Modifier.fillMaxSize(),
+                    onStateChanged = { videoReplay = it }
+                )
+            TelemetrySource.OFFICIAL_AUTEL -> H264LiveVideo(
+                    frames = liveVideoFrames,
+                    modifier = Modifier.fillMaxSize(),
+                    onStateChanged = { liveVideo = it }
+                )
+            TelemetrySource.MOCK -> ArtificialHorizon(
+                    rollDeg = state.attitude.rollDeg ?: 0.0,
+                    pitchDeg = state.attitude.pitchDeg ?: 0.0,
+                    modifier = Modifier.fillMaxSize()
+                )
         }
 
         HeadingTape(
@@ -150,7 +166,7 @@ private fun CockpitViewport(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             HudLabel(
-                "US ${state.navigation.ultrasonicHeightM?.let { "%.1fm".format(it) } ?: "—"}",
+                "US ${state.navigation.ultrasonicHeightM?.let { "%.1fm".format(it) } ?: state.navigation.ultrasonicHeightRaw?.let { "%.2f?".format(it) } ?: "—"}",
                 if (state.navigation.ultrasonicHeightM == null) HudAmber else HudGreen
             )
             HudLabel("BAT ${state.battery.percent?.let { "$it%" } ?: "—"}", batteryColor(state.battery.percent))
@@ -161,9 +177,12 @@ private fun CockpitViewport(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                if (source == TelemetrySource.MAVLINK_REPLAY)
-                    "REPLAY ${replayState.status.name} · ${(replayState.progress * 100).roundToInt()}%"
-                else "MOCK TELEMETRY",
+                when (source) {
+                    TelemetrySource.MAVLINK_REPLAY ->
+                        "REPLAY ${replayState.status.name} · ${(replayState.progress * 100).roundToInt()}%"
+                    TelemetrySource.OFFICIAL_AUTEL -> "LIVE X-STAR · RECEIVE ONLY"
+                    TelemetrySource.MOCK -> "MOCK TELEMETRY"
+                },
                 color = HudGreen,
                 style = MaterialTheme.typography.labelMedium,
                 fontFamily = FontFamily.Monospace,
@@ -171,13 +190,21 @@ private fun CockpitViewport(
             )
             Text(
                 when {
-                    source != TelemetrySource.MAVLINK_REPLAY -> "SYNTHETIC VIEW · NO CAMERA FRAMES"
-                    videoReplay.status == VideoReplayStatus.ERROR -> "AVC DECODER ERROR · ${videoReplay.error ?: "UNKNOWN"}"
+                    source == TelemetrySource.MOCK -> "SYNTHETIC VIEW · NO CAMERA FRAMES"
+                    source == TelemetrySource.OFFICIAL_AUTEL && liveVideo.status == LiveVideoStatus.ERROR ->
+                        "LIVE AVC ERROR · ${liveVideo.error ?: "UNKNOWN"}"
+                    source == TelemetrySource.OFFICIAL_AUTEL && liveVideo.status == LiveVideoStatus.PLAYING ->
+                        "LIVE H.264 · ${liveVideo.framesRendered} RENDERED · ${liveVideo.framesDropped} DROPPED"
+                    source == TelemetrySource.OFFICIAL_AUTEL -> "LIVE H.264 · WAITING FOR KEYFRAME"
+                    videoReplay.status == VideoReplayStatus.ERROR ->
+                        "AVC DECODER ERROR · ${videoReplay.error ?: "UNKNOWN"}"
                     videoReplay.status == VideoReplayStatus.PLAYING ->
                         "SYNTHETIC H.264 · ${videoReplay.framesRendered}/${videoReplay.frameCount} · LOOP ${videoReplay.loopCount}"
                     else -> "H.264 REPLAY · WAITING FOR DECODER"
                 },
-                color = if (videoReplay.status == VideoReplayStatus.ERROR) HudRed else HudAmber,
+                color = if (
+                    videoReplay.status == VideoReplayStatus.ERROR || liveVideo.status == LiveVideoStatus.ERROR
+                ) HudRed else HudAmber,
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace
             )

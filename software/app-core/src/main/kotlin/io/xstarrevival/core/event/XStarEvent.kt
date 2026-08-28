@@ -32,7 +32,8 @@ sealed interface XStarEvent {
         val altitudeM: Double? = null,
         val groundSpeedMps: Double? = null,
         val verticalSpeedMps: Double? = null,
-        val ultrasonicHeightM: Double? = null
+        val ultrasonicHeightM: Double? = null,
+        val ultrasonicHeightRaw: Double? = null
     ) : XStarEvent
 
     data class AttitudeSnapshot(

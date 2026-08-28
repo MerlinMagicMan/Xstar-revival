@@ -17,66 +17,80 @@ object XStarReducer {
                 )
             )
             is XStarEvent.ComponentVersionsSnapshot -> state.copy(
-                aircraft = state.aircraft.copy(componentVersions = event.values)
+                aircraft = state.aircraft.copy(componentVersions = state.aircraft.componentVersions + event.values)
             )
             is XStarEvent.ArmStateChanged -> state.copy(
                 aircraft = state.aircraft.copy(armed = event.armed, flightMode = event.flightMode)
             )
             is XStarEvent.BatterySnapshot -> state.copy(
                 battery = state.battery.copy(
-                    percent = event.percent,
-                    packVoltageV = event.packVoltageV,
-                    currentA = event.currentA,
-                    temperatureC = event.temperatureC,
-                    designCapacityMah = event.designCapacityMah,
-                    fullCapacityMah = event.fullCapacityMah,
-                    remainingCapacityMah = event.remainingCapacityMah,
-                    cells = event.cellVoltagesV.mapIndexed { index, voltage -> CellState(index + 1, voltage) },
-                    dischargeCount = event.dischargeCount,
-                    firmwareVersion = event.firmwareVersion
+                    percent = event.percent ?: state.battery.percent,
+                    packVoltageV = event.packVoltageV ?: state.battery.packVoltageV,
+                    currentA = event.currentA ?: state.battery.currentA,
+                    temperatureC = event.temperatureC ?: state.battery.temperatureC,
+                    designCapacityMah = event.designCapacityMah ?: state.battery.designCapacityMah,
+                    fullCapacityMah = event.fullCapacityMah ?: state.battery.fullCapacityMah,
+                    remainingCapacityMah = event.remainingCapacityMah ?: state.battery.remainingCapacityMah,
+                    cells = event.cellVoltagesV.takeIf { it.isNotEmpty() }
+                        ?.mapIndexed { index, voltage -> CellState(index + 1, voltage) }
+                        ?: state.battery.cells,
+                    dischargeCount = event.dischargeCount ?: state.battery.dischargeCount,
+                    firmwareVersion = event.firmwareVersion ?: state.battery.firmwareVersion
                 )
             )
             is XStarEvent.NavigationSnapshot -> state.copy(
-                navigation = NavigationState(
-                    latitudeDeg = event.latitudeDeg,
-                    longitudeDeg = event.longitudeDeg,
-                    homeLatitudeDeg = event.homeLatitudeDeg,
-                    homeLongitudeDeg = event.homeLongitudeDeg,
-                    satellites = event.satellites,
-                    gpsFix = event.gpsFix,
-                    altitudeM = event.altitudeM,
-                    groundSpeedMps = event.groundSpeedMps,
-                    verticalSpeedMps = event.verticalSpeedMps,
-                    ultrasonicHeightM = event.ultrasonicHeightM
+                navigation = state.navigation.copy(
+                    latitudeDeg = event.latitudeDeg ?: state.navigation.latitudeDeg,
+                    longitudeDeg = event.longitudeDeg ?: state.navigation.longitudeDeg,
+                    homeLatitudeDeg = event.homeLatitudeDeg ?: state.navigation.homeLatitudeDeg,
+                    homeLongitudeDeg = event.homeLongitudeDeg ?: state.navigation.homeLongitudeDeg,
+                    satellites = event.satellites ?: state.navigation.satellites,
+                    gpsFix = event.gpsFix ?: state.navigation.gpsFix,
+                    altitudeM = event.altitudeM ?: state.navigation.altitudeM,
+                    groundSpeedMps = event.groundSpeedMps ?: state.navigation.groundSpeedMps,
+                    verticalSpeedMps = event.verticalSpeedMps ?: state.navigation.verticalSpeedMps,
+                    ultrasonicHeightM = event.ultrasonicHeightM ?: state.navigation.ultrasonicHeightM,
+                    ultrasonicHeightRaw = event.ultrasonicHeightRaw ?: state.navigation.ultrasonicHeightRaw
                 )
             )
             is XStarEvent.AttitudeSnapshot -> state.copy(
-                attitude = AttitudeState(event.rollDeg, event.pitchDeg, event.yawDeg)
+                attitude = state.attitude.copy(
+                    rollDeg = event.rollDeg ?: state.attitude.rollDeg,
+                    pitchDeg = event.pitchDeg ?: state.attitude.pitchDeg,
+                    yawDeg = event.yawDeg ?: state.attitude.yawDeg
+                )
             )
             is XStarEvent.RemoteSnapshot -> state.copy(
-                remote = RemoteState(
-                    event.connected,
-                    event.signalPercent,
-                    event.batteryPercent,
-                    event.imageSignalPercent,
-                    event.opaqueControlMenu
+                remote = state.remote.copy(
+                    connected = event.connected ?: state.remote.connected,
+                    signalPercent = event.signalPercent ?: state.remote.signalPercent,
+                    batteryPercent = event.batteryPercent ?: state.remote.batteryPercent,
+                    imageSignalPercent = event.imageSignalPercent ?: state.remote.imageSignalPercent,
+                    opaqueControlMenu = event.opaqueControlMenu ?: state.remote.opaqueControlMenu
                 )
             )
             is XStarEvent.CameraSnapshot -> state.copy(
                 camera = state.camera.copy(
-                    connected = event.connected,
-                    mode = event.mode,
-                    recording = event.recording,
-                    exposureMode = event.exposureMode,
-                    iso = event.iso,
-                    shutter = event.shutter
+                    connected = event.connected ?: state.camera.connected,
+                    mode = event.mode ?: state.camera.mode,
+                    recording = event.recording ?: state.camera.recording,
+                    exposureMode = event.exposureMode ?: state.camera.exposureMode,
+                    iso = event.iso ?: state.camera.iso,
+                    shutter = event.shutter ?: state.camera.shutter
                 )
             )
             is XStarEvent.GimbalSnapshot -> state.copy(
-                gimbal = GimbalState(event.pitchDeg, event.status)
+                gimbal = state.gimbal.copy(
+                    pitchDeg = event.pitchDeg ?: state.gimbal.pitchDeg,
+                    status = event.status ?: state.gimbal.status
+                )
             )
             is XStarEvent.ImageLinkSnapshot -> state.copy(
-                imageLink = ImageLinkState(event.usbEnabled, event.rfFrequencyHz, event.rfSignalValue)
+                imageLink = state.imageLink.copy(
+                    usbEnabled = event.usbEnabled ?: state.imageLink.usbEnabled,
+                    rfFrequencyHz = event.rfFrequencyHz ?: state.imageLink.rfFrequencyHz,
+                    rfSignalValue = event.rfSignalValue ?: state.imageLink.rfSignalValue
+                )
             )
             is XStarEvent.VideoSnapshot -> state.copy(
                 camera = state.camera.copy(

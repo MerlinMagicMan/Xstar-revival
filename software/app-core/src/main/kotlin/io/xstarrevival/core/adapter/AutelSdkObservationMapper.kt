@@ -66,7 +66,8 @@ object AutelSdkObservationMapper {
                     altitudeM = observation.altitudeM,
                     groundSpeedMps = observation.groundSpeedMps,
                     verticalSpeedMps = observation.verticalSpeedMps,
-                    ultrasonicHeightM = ultrasonic
+                    ultrasonicHeightM = ultrasonic,
+                    ultrasonicHeightRaw = observation.ultrasonicHeight?.value
                 )
             )
             add(
