@@ -12,16 +12,20 @@ class MockXStarPlatformTest {
     @Test
     fun connectsWithRealisticReadOnlyState() = runTest {
         val platform = MockXStarPlatform(this)
-        platform.connect()
+        try {
+            platform.connect()
 
-        val state = platform.state.value
-        assertIs<ConnectionState.Connected>(state.connection)
-        assertEquals("X-Star Premium", state.aircraft.productName)
-        assertEquals(4, state.battery.cells.size)
-        assertNotNull(state.battery.cellDeltaV)
-        assertTrue((state.battery.cellDeltaV ?: 1.0) < 0.05)
-        assertEquals("H.264", state.camera.video.codec)
-        assertTrue(state.camera.video.receiving)
+            val state = platform.state.value
+            assertIs<ConnectionState.Connected>(state.connection)
+            assertEquals("X-Star Premium", state.aircraft.productName)
+            assertEquals(4, state.battery.cells.size)
+            assertNotNull(state.battery.cellDeltaV)
+            assertTrue((state.battery.cellDeltaV ?: 1.0) < 0.05)
+            assertEquals("H.264", state.camera.video.codec)
+            assertTrue(state.camera.video.receiving)
+        } finally {
+            platform.disconnect()
+        }
     }
 
     @Test
