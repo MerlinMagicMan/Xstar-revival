@@ -14,6 +14,12 @@ The project has two parallel tracks:
 1. **Software preservation** — modern Android ground-control software, protocol documentation, telemetry, FPV, diagnostics, logs, and eventually feature parity with Starlink.
 2. **Hardware preservation** — battery architecture research, diagnostics, repair/rebuild documentation, parts interchange, and long-term service knowledge.
 
+## Product Roadmap
+
+The authoritative feature and product roadmap is [`docs/FEATURE-ROADMAP.md`](docs/FEATURE-ROADMAP.md).
+
+It covers the full product vision: modern flight planning, Glass Cockpit, Vision Copilot, Subject Lock, Ghost Flight, 3D/property intelligence, flight simulation, Landing Assistant, visual obstacle/RTH capabilities, multi-aircraft support, aftermarket batteries, parts preservation, Revival Link/BYO remotes, AI flight analysis, phased safety gates, and long-term moonshots.
+
 ## Current Highest-Priority Lead
 
 Autel's official public Mobile SDK sample contains explicit `X_STAR` and `PREMIUM` product routes, dedicated `XStarPremiumAircraft` modules, battery and flight-controller APIs, video callbacks, USB accessory handling and ARM64 build configuration.
@@ -71,8 +77,9 @@ Static inspection of the legacy Starlink APK shows strong evidence of:
 
 Official Autel SDK source independently confirms X-Star/X-Star Premium product interfaces and video, battery, flight-controller, remote-controller, gimbal, DSP and mission modules.
 
-## Research Index
+## Research / Product Index
 
+- [`docs/FEATURE-ROADMAP.md`](docs/FEATURE-ROADMAP.md) — authoritative feature roadmap and phased product strategy
 - [`docs/RESEARCH-DOSSIER-2026-08.md`](docs/RESEARCH-DOSSIER-2026-08.md) — consolidated feasibility findings
 - [`docs/OFFICIAL-AUTEL-SDK-PATH.md`](docs/OFFICIAL-AUTEL-SDK-PATH.md) — official SDK opportunity and decision tree
 - [`docs/LEGACY-TABLET-PRESERVATION.md`](docs/LEGACY-TABLET-PRESERVATION.md) — golden-reference tablet capture procedure
