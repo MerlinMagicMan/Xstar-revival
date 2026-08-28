@@ -80,6 +80,7 @@ Official Autel SDK source independently confirms X-Star/X-Star Premium product i
 ## Research / Product Index
 
 - [`docs/FEATURE-ROADMAP.md`](docs/FEATURE-ROADMAP.md) — authoritative feature roadmap and phased product strategy
+- [`docs/XSTAR-HARDWARE-CAPABILITY-MATRIX.md`](docs/XSTAR-HARDWARE-CAPABILITY-MATRIX.md) — physical sensors/components, operating envelopes, software access, roadmap dependencies, and reverse-engineering gaps
 - [`docs/RESEARCH-DOSSIER-2026-08.md`](docs/RESEARCH-DOSSIER-2026-08.md) — consolidated feasibility findings
 - [`docs/OFFICIAL-AUTEL-SDK-PATH.md`](docs/OFFICIAL-AUTEL-SDK-PATH.md) — official SDK opportunity and decision tree
 - [`docs/XSTAR-SDK-CAPABILITY-MATRIX.md`](docs/XSTAR-SDK-CAPABILITY-MATRIX.md) — exhaustive X-Star SDK read/write capability and safety classification
