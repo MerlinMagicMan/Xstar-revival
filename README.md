@@ -82,6 +82,7 @@ Official Autel SDK source independently confirms X-Star/X-Star Premium product i
 - [`docs/FEATURE-ROADMAP.md`](docs/FEATURE-ROADMAP.md) — authoritative feature roadmap and phased product strategy
 - [`docs/RESEARCH-DOSSIER-2026-08.md`](docs/RESEARCH-DOSSIER-2026-08.md) — consolidated feasibility findings
 - [`docs/OFFICIAL-AUTEL-SDK-PATH.md`](docs/OFFICIAL-AUTEL-SDK-PATH.md) — official SDK opportunity and decision tree
+- [`docs/XSTAR-SDK-CAPABILITY-MATRIX.md`](docs/XSTAR-SDK-CAPABILITY-MATRIX.md) — exhaustive X-Star SDK read/write capability and safety classification
 - [`docs/LEGACY-TABLET-PRESERVATION.md`](docs/LEGACY-TABLET-PRESERVATION.md) — golden-reference tablet capture procedure
 - [`docs/RADIO-AND-TRANSPORT.md`](docs/RADIO-AND-TRANSPORT.md) — USB, proxy and RF architecture
 - [`docs/FLIGHT-LOG-FORMAT.md`](docs/FLIGHT-LOG-FORMAT.md) — PX4-derived log research
