@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val defaultAutelAar = rootProject.file("../android-sdk-probe/app/libs/autel-sdk-release.aar")
+val autelSdkAar = providers.gradleProperty("AUTEL_SDK_AAR")
+    .orElse(providers.environmentVariable("AUTEL_SDK_AAR"))
+    .map(::file)
+    .getOrElse(defaultAutelAar)
+val autelSdkEnabled = autelSdkAar.isFile && project.findProject(":autelBridge") != null
+val autelAppKey = providers.gradleProperty("AUTEL_APP_KEY")
+    .orElse(providers.environmentVariable("AUTEL_APP_KEY"))
+    .getOrElse("")
+val escapedAutelAppKey = autelAppKey.replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "io.xstarrevival.app"
     compileSdk = 35
@@ -14,9 +25,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("boolean", "AUTEL_SDK_AVAILABLE", autelSdkEnabled.toString())
+        buildConfigField("String", "AUTEL_APP_KEY", "\"$escapedAutelAppKey\"")
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 
@@ -32,6 +46,11 @@ android {
 
 dependencies {
     implementation(project(":appCore"))
+
+    if (autelSdkEnabled) {
+        implementation(project(":autelBridge"))
+        implementation(files(autelSdkAar))
+    }
 
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.activity:activity-compose:1.10.0")

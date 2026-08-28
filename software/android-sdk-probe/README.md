@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This module will test the shortest known path to a modern X-Star Premium application: Autel's official legacy Mobile SDK and its explicit `XStarPremiumAircraft` APIs.
+This module tests the shortest known path to a modern X-Star Premium application: Autel's official legacy Mobile SDK and its explicit `XStarPremiumAircraft` APIs.
 
 This is an engineering diagnostic, not a flight application.
 
@@ -38,28 +38,27 @@ Prohibited:
 
 Aircraft propellers must be removed whenever the aircraft is powered during this phase.
 
-## Architecture
+## Implemented architecture
 
 ```text
-SdkProbeApplication
-├── SdkAuthenticationProbe
-├── ProductConnectionProbe
-├── ComponentInventoryProbe
-├── BatteryReadOnlyProbe
-├── FlightStateReadOnlyProbe
-├── VideoReadOnlyProbe
-└── DiagnosticsRecorder
+MainActivity
+    ↓
+AutelSdkPlatformAdapter
+    ↓
+OfficialAutelSdkBridge
+    ↓
+official autel-sdk-release.aar
 ```
 
-Every call must pass through a read-only allowlist. The application should not compile any activity or service that exposes write/control APIs.
+The probe now compiles against the validated official AAR and displays normalized product, battery, flight, ultrasonic, attitude, remote, gimbal, camera, DSP/RF, version, H.264 frame-count, and diagnostic state. Every call passes through the same read-only binding used by the optional product build; Gradle rejects known flight-control, mission, camera-actuation, pairing, calibration, destructive, and configuration-write references.
 
-## Intended UI
+## UI
 
 ```text
 X-STAR OFFICIAL SDK PROBE
 
-SDK AUTH
-○ Not initialized
+CONNECTION
+○ Not initialized / waiting / connected
 
 USB / PRODUCT
 ○ No product
@@ -85,7 +84,7 @@ Altitude: —
 VIDEO
 ○ No stream
 
-[Export diagnostics]
+[Refresh read-only state]
 ```
 
 ## Diagnostic Events
@@ -124,10 +123,18 @@ exception
 
 Redact app keys, serial numbers, coordinates and other identifiers from public logs.
 
-## Build Questions to Resolve
+## Build
 
-- Which official AAR revision should be tested first?
-- Does the current AAR contain all required `arm64-v8a` native libraries?
+Place `autel-sdk-release.aar` in `app/libs` (ignored by Git), then optionally provide the registered local app key:
+
+```bash
+AUTEL_APP_KEY=your_registered_app_key gradle :app:assembleDebug
+```
+
+The APK builds without an app key but intentionally will not initialize the SDK at runtime.
+
+## Hardware Questions to Resolve
+
 - Can Autel still issue an app key that authorizes the legacy SDK path?
 - Must the package remain `com.autel.maxlink`, and how does signing/whitelisting interact with it?
 - Does a modern target SDK change USB accessory behavior?

@@ -1,6 +1,6 @@
 # X-Star Revival Android App
 
-This is the product-facing Android application, currently running entirely against `MockXStarPlatform`.
+This is the product-facing Android application. Its public build includes mock and deterministic replay modes; a local opt-in build can add the official receive-only Autel SDK adapter.
 
 ## Current capabilities
 
@@ -32,7 +32,21 @@ The app can switch at runtime between the changing X-Star mock and a synthetic, 
 
 Replay controls support play, pause, restart, 0.5×/1×/2× speed, progress, stream completion, and heartbeat-staleness display.
 
-The Cockpit / FPV screen renders its telemetry HUD from `XStarState`. In MAVLink replay mode, an original raw H.264 Annex-B fixture is split by the app-core scanner and decoded to a `TextureView` with Android `MediaCodec`, exercising real AVC pixels beneath the Compose HUD. The clip is explicitly marked synthetic and is not X-Star camera footage. Future receive-only camera bytes can replace the fixture without changing the HUD or decoder boundary; Autel USB/channel framing remains deliberately unspecified.
+The Cockpit / FPV screen renders its telemetry HUD from `XStarState`. In MAVLink replay mode, an original raw H.264 Annex-B fixture is split by the app-core scanner and decoded to a `TextureView` with Android `MediaCodec`, exercising real AVC pixels beneath the Compose HUD. The clip is explicitly marked synthetic and is not X-Star camera footage.
+
+When the optional official SDK binding is present, the same cockpit decodes the SDK's documented receive-only H.264 callback. It waits for a keyframe, supplies the standard AVC stream to `MediaCodec`, and reports rendered/dropped frames beneath the HUD. No proprietary USB framing is inferred.
+
+## Optional live X-Star build
+
+The proprietary AAR and SDK app key are intentionally excluded from Git. Supply both only in your local environment:
+
+```bash
+AUTEL_SDK_AAR=/absolute/path/to/autel-sdk-release.aar \
+AUTEL_APP_KEY=your_registered_app_key \
+./gradlew :app:assembleDebug
+```
+
+The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17` and contains both `arm64-v8a` and `armeabi-v7a` native libraries. When the file is absent, the `Live X-Star` source and all proprietary classes are omitted from the build.
 
 ## Adapter plan
 
@@ -56,9 +70,9 @@ OpenXStarPlatform
 
 when those adapters are ready.
 
-The official bridge's allowed observations and compile-time forbidden control calls are defined in the [X-Star SDK Capability Matrix](../../docs/XSTAR-SDK-CAPABILITY-MATRIX.md). Live SDK work must preserve that read-only boundary.
+The official bridge's allowed observations and compile-time forbidden control calls are defined in the [X-Star SDK Capability Matrix](../../docs/XSTAR-SDK-CAPABILITY-MATRIX.md). Local Gradle builds and public CI both run an explicit forbidden-call audit.
 
-App core now provides a typed `AutelSdkBridge` observation contract and `H264VideoSource`. The Android AAR binding can feed documented SDK callbacks into that seam without placing proprietary SDK types in the UI or domain model. The remaining hardware-specific step is implementing that binding against a locally supplied official AAR and authenticated app key.
+App core provides a typed `AutelSdkBridge` observation contract and `H264VideoSource`. The Android binding feeds documented SDK callbacks into that seam without placing proprietary SDK types in the UI or domain model.
 
 ## Safety
 

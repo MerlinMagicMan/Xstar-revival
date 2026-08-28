@@ -21,6 +21,8 @@ import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayStatus
+import io.xstarrevival.core.video.H264VideoFrame
+import kotlinx.coroutines.flow.Flow
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,9 +39,11 @@ class MainActivity : ComponentActivity() {
                 XStarApp(
                     state = state,
                     source = source,
+                    availableSources = vm.availableSources,
                     platformName = platformName,
                     replayState = replayState,
                     heartbeat = heartbeat,
+                    liveVideoFrames = vm.liveVideoFrames,
                     onSourceSelected = vm::selectSource,
                     onConnect = vm::connect,
                     onDisconnect = vm::disconnect,
@@ -63,9 +67,11 @@ private enum class AppView(val label: String) {
 private fun XStarApp(
     state: XStarState,
     source: TelemetrySource,
+    availableSources: List<TelemetrySource>,
     platformName: String,
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
+    liveVideoFrames: Flow<H264VideoFrame>,
     onSourceSelected: (TelemetrySource) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
@@ -95,7 +101,7 @@ private fun XStarApp(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TelemetrySource.entries.forEach { option ->
+                availableSources.forEach { option ->
                     FilterChip(
                         selected = source == option,
                         onClick = { onSourceSelected(option) },
@@ -141,6 +147,7 @@ private fun XStarApp(
                 source = source,
                 replayState = replayState,
                 heartbeat = heartbeat,
+                liveVideoFrames = liveVideoFrames,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -314,6 +321,9 @@ private fun NavigationCard(state: XStarState) = SectionCard("Navigation") {
     Metric("Satellites", state.navigation.satellites?.toString())
     Metric("Altitude", state.navigation.altitudeM?.let { "%.1f m".format(it) })
     Metric("Ultrasonic height", state.navigation.ultrasonicHeightM?.let { "%.2f m".format(it) })
+    if (state.navigation.ultrasonicHeightM == null) {
+        Metric("Ultrasonic raw", state.navigation.ultrasonicHeightRaw?.let { "%.3f SDK units".format(it) })
+    }
     Metric("Ground speed", state.navigation.groundSpeedMps?.let { "%.1f m/s".format(it) })
     Metric("Vertical speed", state.navigation.verticalSpeedMps?.let { "%.1f m/s".format(it) })
 }

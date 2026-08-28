@@ -19,6 +19,17 @@ The matrix is deliberately conservative. An API is not treated as an X-Star capa
 
 Archive review found 856 entries, including 763 HTML pages. It contains generated documentation, not an Android library: no AAR, JAR, class, Java source, or native-library payload was present. The archive passed CRC and path-traversal checks. One Windows shortcut was present and was not executed. Source documents are not committed to this repository; only derived facts and hashes are retained.
 
+### Compiled AAR cross-check
+
+The receive-only binding was compiled against `app/libs/autel-sdk-release.aar` from Autel's official Android sample repository (Git blob `d7a533f33a184ac4db72a179fa846eea8965c6e1`, SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17`). The 12,241,390-byte archive contains both `arm64-v8a` and `armeabi-v7a` native libraries.
+
+Binary inspection found two relevant differences from the 2.0.11.79 documentation corpus:
+
+- `AutelCodecListener` also requires a decoded-frame callback. Revival implements it as a no-op and consumes only the documented raw H.264 receive callback.
+- `AutelFlyController` exposes `setRemoteControlStick(...)`. This is an aircraft-control write and is explicitly included in the source audit's forbidden-call list.
+
+The AAR remains uncommitted and no undocumented binary member is treated as safe merely because it exists.
+
 ### Coverage boundary
 
 This inventory includes:

@@ -60,7 +60,8 @@ data class NavigationState(
     val altitudeM: Double? = null,
     val groundSpeedMps: Double? = null,
     val verticalSpeedMps: Double? = null,
-    val ultrasonicHeightM: Double? = null
+    val ultrasonicHeightM: Double? = null,
+    val ultrasonicHeightRaw: Double? = null
 )
 
 data class AttitudeState(

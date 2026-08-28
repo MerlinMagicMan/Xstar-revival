@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 android {
@@ -35,12 +36,18 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
     }
 }
 
 dependencies {
+    implementation project(':appCore')
+    implementation project(':autelBridge')
     // Obtain this AAR from Autel's official SDK distribution/repository and place it in app/libs.
     // Do not commit proprietary SDK binaries to this repository.
     implementation(name: 'autel-sdk-release', ext: 'aar')
@@ -52,4 +59,5 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'org.greenrobot:eventbus:3.3.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 }

@@ -1,9 +1,12 @@
 package io.xstarrevival.app
 
+import android.app.Application
 import android.os.SystemClock
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.xstarrevival.core.XStarPlatform
+import io.xstarrevival.core.adapter.AutelSdkBridge
+import io.xstarrevival.core.adapter.AutelSdkPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.mock.MockXStarPlatform
 import io.xstarrevival.core.model.XStarState
@@ -11,19 +14,23 @@ import io.xstarrevival.core.protocol.mavlink.StandardMavlinkDecoder
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
+import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
 enum class TelemetrySource(val label: String) {
     MOCK("Mock"),
-    MAVLINK_REPLAY("MAVLink Replay")
+    MAVLINK_REPLAY("MAVLink Replay"),
+    OFFICIAL_AUTEL("Live X-Star")
 }
 
 data class HeartbeatUiState(
@@ -31,7 +38,7 @@ data class HeartbeatUiState(
     val stale: Boolean = false
 )
 
-class XStarViewModel : ViewModel() {
+class XStarViewModel(application: Application) : AndroidViewModel(application) {
     private val mockPlatform = MockXStarPlatform(viewModelScope)
     private val replayTransport = CaptureReplayTransport(
         scope = viewModelScope,
@@ -43,6 +50,14 @@ class XStarViewModel : ViewModel() {
         transport = replayTransport,
         decoder = StandardMavlinkDecoder()
     )
+    private val officialPlatform = createOfficialPlatform()
+
+    val availableSources: List<TelemetrySource> = buildList {
+        add(TelemetrySource.MOCK)
+        add(TelemetrySource.MAVLINK_REPLAY)
+        if (officialPlatform != null) add(TelemetrySource.OFFICIAL_AUTEL)
+    }
+    val liveVideoFrames: Flow<H264VideoFrame> = officialPlatform?.h264Frames ?: emptyFlow()
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
@@ -76,12 +91,14 @@ class XStarViewModel : ViewModel() {
 
     fun selectSource(value: TelemetrySource) {
         if (value == mutableSource.value) return
+        if (value == TelemetrySource.OFFICIAL_AUTEL && officialPlatform == null) return
         viewModelScope.launch {
             activePlatform.disconnect()
             mutableSource.value = value
             activePlatform = when (value) {
                 TelemetrySource.MOCK -> mockPlatform
                 TelemetrySource.MAVLINK_REPLAY -> replayPlatform
+                TelemetrySource.OFFICIAL_AUTEL -> checkNotNull(officialPlatform)
             }
             mutablePlatformName.value = activePlatform.name
             mutableState.value = XStarState()
@@ -124,7 +141,7 @@ class XStarViewModel : ViewModel() {
     fun setReplaySpeed(speed: Double) = replayTransport.setSpeed(speed)
 
     private suspend fun connectActivePlatform() {
-        activePlatform.connect()
+        runCatching { activePlatform.connect() }
         if (activePlatform === replayPlatform) {
             yield()
             replayTransport.restart()
@@ -166,6 +183,16 @@ class XStarViewModel : ViewModel() {
         lastHeartbeatCount = 0
         lastHeartbeatElapsedMs = null
         mutableHeartbeat.value = HeartbeatUiState()
+    }
+
+    private fun createOfficialPlatform(): AutelSdkPlatformAdapter? {
+        if (!BuildConfig.AUTEL_SDK_AVAILABLE) return null
+        return runCatching {
+            val bridgeClass = Class.forName("io.xstarrevival.autelsdk.OfficialAutelSdkBridge")
+            val constructor = bridgeClass.getConstructor(android.content.Context::class.java, String::class.java)
+            val bridge = constructor.newInstance(getApplication<Application>(), BuildConfig.AUTEL_APP_KEY) as AutelSdkBridge
+            AutelSdkPlatformAdapter(viewModelScope, bridge)
+        }.getOrNull()
     }
 
     override fun onCleared() {

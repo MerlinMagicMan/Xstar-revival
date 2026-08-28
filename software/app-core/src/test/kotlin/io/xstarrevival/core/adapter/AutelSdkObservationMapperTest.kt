@@ -45,6 +45,7 @@ class AutelSdkObservationMapperTest {
         val navigation = events.filterIsInstance<XStarEvent.NavigationSnapshot>().single()
         val attitude = events.filterIsInstance<XStarEvent.AttitudeSnapshot>().single()
         assertNull(navigation.ultrasonicHeightM)
+        assertEquals(135.0, navigation.ultrasonicHeightRaw)
         assertEquals(90.0, attitude.rollDeg)
         assertEquals(-45.0, attitude.pitchDeg)
         assertEquals(180.0, attitude.yawDeg)
