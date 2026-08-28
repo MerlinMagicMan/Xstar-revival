@@ -44,41 +44,37 @@ private fun XStarDashboard(
     onDisconnect: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("X-Star Revival", fontWeight = FontWeight.Bold)
-                        Text(platformName, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "X-Star Revival",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
             )
+            Text(platformName, style = MaterialTheme.typography.labelMedium)
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ConnectionCard(state)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onConnect) { Text("Connect") }
-                OutlinedButton(onClick = onRefresh) { Text("Refresh") }
-                OutlinedButton(onClick = onDisconnect) { Text("Disconnect") }
-            }
+        ConnectionCard(state)
 
-            AircraftCard(state)
-            BatteryCard(state)
-            NavigationCard(state)
-            AttitudeCard(state)
-            RemoteCard(state)
-            CameraCard(state)
-            DiagnosticsCard(state)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onConnect) { Text("Connect") }
+            OutlinedButton(onClick = onRefresh) { Text("Refresh") }
+            OutlinedButton(onClick = onDisconnect) { Text("Disconnect") }
         }
+
+        AircraftCard(state)
+        BatteryCard(state)
+        NavigationCard(state)
+        AttitudeCard(state)
+        RemoteCard(state)
+        CameraCard(state)
+        DiagnosticsCard(state)
     }
 }
 
