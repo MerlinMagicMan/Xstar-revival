@@ -3,11 +3,14 @@ package io.xstarrevival.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -16,6 +19,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.replay.CaptureReplayState
+import io.xstarrevival.core.replay.CaptureReplayStatus
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,42 +29,224 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 val vm: XStarViewModel = viewModel()
                 val state by vm.state.collectAsStateWithLifecycle()
-                XStarDashboard(
+                val source by vm.source.collectAsStateWithLifecycle()
+                val platformName by vm.platformName.collectAsStateWithLifecycle()
+                val replayState by vm.replayState.collectAsStateWithLifecycle()
+                val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
+
+                XStarApp(
                     state = state,
-                    platformName = vm.platformName,
+                    source = source,
+                    platformName = platformName,
+                    replayState = replayState,
+                    heartbeat = heartbeat,
+                    onSourceSelected = vm::selectSource,
                     onConnect = vm::connect,
                     onDisconnect = vm::disconnect,
-                    onRefresh = vm::refresh
+                    onRefresh = vm::refresh,
+                    onPlayReplay = vm::playReplay,
+                    onPauseReplay = vm::pauseReplay,
+                    onRestartReplay = vm::restartReplay,
+                    onReplaySpeedChanged = vm::setReplaySpeed
                 )
             }
         }
     }
 }
 
+private enum class AppView(val label: String) {
+    DASHBOARD("Dashboard"),
+    COCKPIT("Cockpit / FPV")
+}
+
 @Composable
-private fun XStarDashboard(
+private fun XStarApp(
     state: XStarState,
+    source: TelemetrySource,
     platformName: String,
+    replayState: CaptureReplayState,
+    heartbeat: HeartbeatUiState,
+    onSourceSelected: (TelemetrySource) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onPlayReplay: () -> Unit,
+    onPauseReplay: () -> Unit,
+    onRestartReplay: () -> Unit,
+    onReplaySpeedChanged: (Double) -> Unit
+) {
+    var selectedView by rememberSaveable { mutableStateOf(AppView.DASHBOARD) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("X-Star Revival", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(platformName, style = MaterialTheme.typography.labelMedium)
+                }
+                ConnectionBadge(state.connection)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TelemetrySource.entries.forEach { option ->
+                    FilterChip(
+                        selected = source == option,
+                        onClick = { onSourceSelected(option) },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppView.entries.forEach { view ->
+                    if (selectedView == view) {
+                        Button(onClick = { selectedView = view }) { Text(view.label) }
+                    } else {
+                        OutlinedButton(onClick = { selectedView = view }) { Text(view.label) }
+                    }
+                }
+            }
+
+            if (source == TelemetrySource.MAVLINK_REPLAY) {
+                ReplayControls(
+                    replayState = replayState,
+                    heartbeat = heartbeat,
+                    onPlay = onPlayReplay,
+                    onPause = onPauseReplay,
+                    onRestart = onRestartReplay,
+                    onSpeedChanged = onReplaySpeedChanged
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        when (selectedView) {
+            AppView.DASHBOARD -> DashboardScreen(
+                state = state,
+                onConnect = onConnect,
+                onDisconnect = onDisconnect,
+                onRefresh = onRefresh,
+                modifier = Modifier.weight(1f)
+            )
+            AppView.COCKPIT -> CockpitScreen(
+                state = state,
+                source = source,
+                replayState = replayState,
+                heartbeat = heartbeat,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConnectionBadge(connection: ConnectionState) {
+    val text = when (connection) {
+        ConnectionState.Disconnected -> "OFFLINE"
+        ConnectionState.Discovering -> "DISCOVERING"
+        is ConnectionState.Connecting -> "CONNECTING"
+        is ConnectionState.Connected -> "CONNECTED"
+        is ConnectionState.Failed -> "FAILED"
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun ReplayControls(
+    replayState: CaptureReplayState,
+    heartbeat: HeartbeatUiState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onRestart: () -> Unit,
+    onSpeedChanged: (Double) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Replay · ${replayState.status.displayName()}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (replayState.status == CaptureReplayStatus.COMPLETE) {
+                        "Stream complete"
+                    } else {
+                        heartbeat.ageMs?.let { age ->
+                            if (heartbeat.stale) "HEARTBEAT STALE" else "Heartbeat ${age / 1000.0f}s"
+                        } ?: "Awaiting heartbeat"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (heartbeat.stale) MaterialTheme.colorScheme.error else LocalContentColor.current
+                )
+            }
+            LinearProgressIndicator(
+                progress = { replayState.progress },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                when (replayState.status) {
+                    CaptureReplayStatus.PLAYING -> OutlinedButton(onClick = onPause) { Text("Pause") }
+                    CaptureReplayStatus.COMPLETE -> Button(onClick = onRestart) { Text("Replay") }
+                    else -> Button(onClick = onPlay) { Text("Play") }
+                }
+                OutlinedButton(onClick = onRestart) { Text("Restart") }
+                Text(
+                    "${replayState.chunkIndex}/${replayState.chunkCount} chunks",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Speed", style = MaterialTheme.typography.labelMedium)
+                listOf(0.5, 1.0, 2.0).forEach { speed ->
+                    FilterChip(
+                        selected = replayState.speed == speed,
+                        onClick = { onSpeedChanged(speed) },
+                        label = { Text("${speed}×") }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun CaptureReplayStatus.displayName(): String = name.lowercase().replaceFirstChar(Char::uppercase)
+
+@Composable
+private fun DashboardScreen(
+    state: XStarState,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                "X-Star Revival",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(platformName, style = MaterialTheme.typography.labelMedium)
-        }
-
         ConnectionCard(state)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

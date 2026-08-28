@@ -33,6 +33,10 @@ abstract class EventBackedPlatform(
         mutableState.value = XStarReducer.reduce(mutableState.value, event)
     }
 
+    protected fun replaceState(state: XStarState) {
+        mutableState.value = state
+    }
+
     protected fun stopCollecting() {
         eventJob?.cancel()
         eventJob = null

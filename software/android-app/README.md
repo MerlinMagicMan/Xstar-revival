@@ -26,6 +26,14 @@ From this directory:
 
 The project includes `../app-core` as the `:appCore` module.
 
+## Telemetry sources and cockpit
+
+The app can switch at runtime between the changing X-Star mock and a synthetic, timestamped MAVLink byte capture. Replay bytes pass through `CaptureReplayTransport`, `OpenXStarPlatformAdapter`, and `StandardMavlinkDecoder`; the UI does not receive pre-normalized fixture events.
+
+Replay controls support play, pause, restart, 0.5×/1×/2× speed, progress, stream completion, and heartbeat-staleness display.
+
+The Cockpit / FPV screen renders an artificial horizon and telemetry HUD from `XStarState`. Its scene is explicitly marked synthetic: camera status metadata is not treated as decoded video, and no actual FPV pixels are shown until a validated camera transport and video decoder are implemented.
+
 ## Adapter plan
 
 The ViewModel owns an `XStarPlatform` only. Moving to live hardware should be a dependency-selection change rather than a UI rewrite:

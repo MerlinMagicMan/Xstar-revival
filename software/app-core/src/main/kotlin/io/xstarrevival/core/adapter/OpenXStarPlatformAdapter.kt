@@ -2,6 +2,8 @@ package io.xstarrevival.core.adapter
 
 import io.xstarrevival.core.event.XStarEvent
 import io.xstarrevival.core.model.ConnectionState
+import io.xstarrevival.core.model.DiagnosticsState
+import io.xstarrevival.core.model.XStarState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
@@ -16,7 +18,12 @@ class OpenXStarPlatformAdapter(
     private var readJob: Job? = null
 
     override suspend fun connect() {
-        emit(XStarEvent.ConnectionChanged(ConnectionState.Connecting("usb-transport")))
+        replaceState(
+            XStarState(
+                connection = ConnectionState.Connecting("usb-transport"),
+                diagnostics = DiagnosticsState(source = "open-mavlink")
+            )
+        )
         decoder.reset()
         try {
             transport.connect()
@@ -44,7 +51,7 @@ class OpenXStarPlatformAdapter(
             transport.disconnect()
         } finally {
             decoder.reset()
-            emit(XStarEvent.ConnectionChanged(ConnectionState.Disconnected))
+            replaceState(XStarState(connection = ConnectionState.Disconnected))
         }
     }
 }
