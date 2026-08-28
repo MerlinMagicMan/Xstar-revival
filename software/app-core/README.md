@@ -44,6 +44,23 @@ OpenXStarPlatform
 
 The mock implementation produces deterministic changing telemetry so UI and state handling can be developed without hardware.
 
+## Official SDK read-only bridge
+
+`AutelSdkBridge` is a proprietary-type-free boundary for an optional Android binding around Autel's legacy AAR. Its public surface contains only initialization, discovery, disconnection, passive refresh, typed observation callbacks, and receive-only H.264 frames.
+
+The bridge normalizes:
+
+- product and component availability;
+- documented battery mV/mA/mAh values;
+- GPS, home, altitude, velocity, ultrasonic height, and attitude;
+- remote, image-link/RF, gimbal, and R12 state;
+- component versions and warnings; and
+- H.264 payload length, keyframe flag, callback timestamp, and frame statistics.
+
+Values whose SDK unit is not established remain unknown rather than being guessed. The remote control-menu array remains opaque. The app-facing adapter exposes raw H.264 through `H264VideoSource`, which has no write method.
+
+The standalone module pins its own Kotlin plugin and repositories, so its safety and normalization tests can run independently with `gradle test`.
+
 ## Independent MAVLink decoder
 
 `StandardMavlinkDecoder` incrementally reassembles MAVLink v1/v2 frames from arbitrary transport chunks. It only maps CRC-verified standard messages whose fields have a direct normalized meaning:

@@ -6,6 +6,7 @@ import io.xstarrevival.core.model.WarningState
 sealed interface XStarEvent {
     data class ConnectionChanged(val value: ConnectionState) : XStarEvent
     data class ProductIdentified(val name: String?, val firmwareVersion: String?) : XStarEvent
+    data class ComponentVersionsSnapshot(val values: Map<String, String>) : XStarEvent
     data class ArmStateChanged(val armed: Boolean?, val flightMode: String?) : XStarEvent
 
     data class BatterySnapshot(
@@ -16,7 +17,9 @@ sealed interface XStarEvent {
         val designCapacityMah: Int? = null,
         val fullCapacityMah: Int? = null,
         val remainingCapacityMah: Int? = null,
-        val cellVoltagesV: List<Double?> = emptyList()
+        val cellVoltagesV: List<Double?> = emptyList(),
+        val dischargeCount: Int? = null,
+        val firmwareVersion: String? = null
     ) : XStarEvent
 
     data class NavigationSnapshot(
@@ -28,7 +31,8 @@ sealed interface XStarEvent {
         val gpsFix: String? = null,
         val altitudeM: Double? = null,
         val groundSpeedMps: Double? = null,
-        val verticalSpeedMps: Double? = null
+        val verticalSpeedMps: Double? = null,
+        val ultrasonicHeightM: Double? = null
     ) : XStarEvent
 
     data class AttitudeSnapshot(
@@ -40,13 +44,25 @@ sealed interface XStarEvent {
     data class RemoteSnapshot(
         val connected: Boolean? = null,
         val signalPercent: Int? = null,
-        val batteryPercent: Int? = null
+        val batteryPercent: Int? = null,
+        val imageSignalPercent: Int? = null,
+        val opaqueControlMenu: List<Int>? = null
     ) : XStarEvent
 
     data class CameraSnapshot(
         val connected: Boolean? = null,
         val mode: String? = null,
-        val recording: Boolean? = null
+        val recording: Boolean? = null,
+        val exposureMode: String? = null,
+        val iso: String? = null,
+        val shutter: String? = null
+    ) : XStarEvent
+
+    data class GimbalSnapshot(val pitchDeg: Double? = null, val status: String? = null) : XStarEvent
+    data class ImageLinkSnapshot(
+        val usbEnabled: Boolean? = null,
+        val rfFrequencyHz: Double? = null,
+        val rfSignalValue: Int? = null
     ) : XStarEvent
 
     data class VideoSnapshot(
@@ -58,7 +74,10 @@ sealed interface XStarEvent {
         val bitrateBps: Long? = null
     ) : XStarEvent
 
+    data class VideoFrameReceived(val validBytes: Int, val isKeyFrame: Boolean) : XStarEvent
+
     data class WarningsReplaced(val warnings: List<WarningState>) : XStarEvent
+    data class WarningObserved(val warning: WarningState) : XStarEvent
     data class DiagnosticCounter(val key: String, val value: Long) : XStarEvent
     data class DiagnosticNote(val value: String) : XStarEvent
 }

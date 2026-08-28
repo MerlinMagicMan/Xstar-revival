@@ -149,6 +149,10 @@ private fun CockpitViewport(
                 .padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            HudLabel(
+                "US ${state.navigation.ultrasonicHeightM?.let { "%.1fm".format(it) } ?: "—"}",
+                if (state.navigation.ultrasonicHeightM == null) HudAmber else HudGreen
+            )
             HudLabel("BAT ${state.battery.percent?.let { "$it%" } ?: "—"}", batteryColor(state.battery.percent))
         }
 
