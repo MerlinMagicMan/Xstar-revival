@@ -1,0 +1,21 @@
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Proprietary/local research artifacts
+research-local/
+*.apk
+*.bin
+*.fw
+*.img
+*.pcap
+*.pcapng
+
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
