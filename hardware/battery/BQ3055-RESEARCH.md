@@ -6,18 +6,21 @@ Community teardown and successful rebuild reports identify the X-Star intelligen
 
 ## Official Pack Baseline
 
-From the X-Star manual:
+From the X-Star manual and charger teardown:
 
 ```text
 Chemistry: lithium polymer
 Nominal voltage: 14.8 V
 Capacity: 4900 mAh
-Likely topology: 4 cells in series (4S)
-Approximate charge limit: 17 V
+Topology: 4 cells in series (4S)
+Normal stock-pack target: 16.8 V total / 4.20 V per cell
+Manual protection ceiling: approximately 17 V
 Approximate discharge cutoff: 10.8 V
 Reported values: level, current, voltage, life, temperature
 Pack features: balancing, temperature detection/protection
 ```
+
+The manual's approximately 17 V statement is treated as an overcharge-protection threshold, not the normal charging setpoint. An original 14.8 V X-Star pack should use the standard **4S LiPo** profile, not LiHV. LiHV applies only to a documented rebuild using high-voltage cells with a deliberately validated BMS configuration.
 
 ## bq3055 Capabilities
 
@@ -63,6 +66,7 @@ Community reports are evidence of feasibility, not an endorsed repair procedure.
 - Identify all balancing paths and connector order.
 - Identify thermistor type, quantity and placement.
 - Determine whether pack negative is switched or always present.
+- Determine whether the stock BMS requires a charger-present or activation signal.
 
 ### Smart-gauge configuration
 
@@ -169,7 +173,9 @@ A later service tool might support validated rebuild workflows, but write operat
 | Claim | Status |
 |---|---|
 | Original pack is 14.8 V / 4900 mAh LiPo | Confirmed official |
-| Pack is consistent with 4S | Strong inference |
+| Pack is 4S | Confirmed by charger teardown; consistent with official voltage |
+| Stock-pack normal target is 16.8 V / 4.20 V per cell | Engineering conclusion from standard 4S LiPo chemistry |
+| Manual's approximately 17 V figure is a protection ceiling | Strong interpretation of official protection language |
 | Gauge is TI bq3055 | Multiple community reports; physical confirmation needed |
 | Gauge communicates by SMBus | Confirmed bq3055 capability; pack confirmation needed |
 | Cell replacement has been flight-tested | Community reported |
