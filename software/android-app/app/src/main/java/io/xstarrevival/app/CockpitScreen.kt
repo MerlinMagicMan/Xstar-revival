@@ -11,6 +11,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,6 +86,7 @@ private fun CockpitViewport(
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState
 ) {
+    var videoReplay by remember { mutableStateOf(VideoReplayUiState()) }
     val shape = RoundedCornerShape(18.dp)
     Box(
         modifier = Modifier
@@ -91,11 +96,18 @@ private fun CockpitViewport(
             .background(ViewportBlack)
             .border(1.dp, HudGreen.copy(alpha = 0.45f), shape)
     ) {
-        ArtificialHorizon(
-            rollDeg = state.attitude.rollDeg ?: 0.0,
-            pitchDeg = state.attitude.pitchDeg ?: 0.0,
-            modifier = Modifier.fillMaxSize()
-        )
+        if (source == TelemetrySource.MAVLINK_REPLAY) {
+            H264ReplayVideo(
+                modifier = Modifier.fillMaxSize(),
+                onStateChanged = { videoReplay = it }
+            )
+        } else {
+            ArtificialHorizon(
+                rollDeg = state.attitude.rollDeg ?: 0.0,
+                pitchDeg = state.attitude.pitchDeg ?: 0.0,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         HeadingTape(
             yawDeg = state.attitude.yawDeg,
@@ -154,8 +166,14 @@ private fun CockpitViewport(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "SYNTHETIC VIEW · NO CAMERA FRAMES",
-                color = HudAmber,
+                when {
+                    source != TelemetrySource.MAVLINK_REPLAY -> "SYNTHETIC VIEW · NO CAMERA FRAMES"
+                    videoReplay.status == VideoReplayStatus.ERROR -> "AVC DECODER ERROR · ${videoReplay.error ?: "UNKNOWN"}"
+                    videoReplay.status == VideoReplayStatus.PLAYING ->
+                        "SYNTHETIC H.264 · ${videoReplay.framesRendered}/${videoReplay.frameCount} · LOOP ${videoReplay.loopCount}"
+                    else -> "H.264 REPLAY · WAITING FOR DECODER"
+                },
+                color = if (videoReplay.status == VideoReplayStatus.ERROR) HudRed else HudAmber,
                 style = MaterialTheme.typography.labelSmall,
                 fontFamily = FontFamily.Monospace
             )

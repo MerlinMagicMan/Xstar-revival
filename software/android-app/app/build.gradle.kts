@@ -42,5 +42,14 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
+    testImplementation(kotlin("test"))
+
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "xstar.videoFixture",
+        layout.projectDirectory.file("src/main/res/raw/xstar_synthetic_fpv.h264").asFile.absolutePath
+    )
 }
