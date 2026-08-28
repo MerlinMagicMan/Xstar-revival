@@ -33,9 +33,9 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Test app core
+      - name: Test app core and video fixture
         working-directory: software/android-app
-        run: gradle :appCore:test --stacktrace
+        run: gradle :appCore:test :app:testDebugUnitTest --stacktrace
 
       - name: Compile debug app
         working-directory: software/android-app

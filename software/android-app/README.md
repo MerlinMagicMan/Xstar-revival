@@ -32,7 +32,7 @@ The app can switch at runtime between the changing X-Star mock and a synthetic, 
 
 Replay controls support play, pause, restart, 0.5×/1×/2× speed, progress, stream completion, and heartbeat-staleness display.
 
-The Cockpit / FPV screen renders an artificial horizon and telemetry HUD from `XStarState`. Its scene is explicitly marked synthetic: camera status metadata is not treated as decoded video, and no actual FPV pixels are shown until a validated camera transport and video decoder are implemented.
+The Cockpit / FPV screen renders its telemetry HUD from `XStarState`. In MAVLink replay mode, an original raw H.264 Annex-B fixture is split by the app-core scanner and decoded to a `TextureView` with Android `MediaCodec`, exercising real AVC pixels beneath the Compose HUD. The clip is explicitly marked synthetic and is not X-Star camera footage. Future receive-only camera bytes can replace the fixture without changing the HUD or decoder boundary; Autel USB/channel framing remains deliberately unspecified.
 
 ## Adapter plan
 
