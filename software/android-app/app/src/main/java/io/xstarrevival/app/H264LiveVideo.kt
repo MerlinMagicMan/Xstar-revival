@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
+import io.xstarrevival.core.video.H264AnnexBInspector
 import io.xstarrevival.core.video.H264VideoFrame
 import java.io.Closeable
 import kotlinx.coroutines.Dispatchers
@@ -132,27 +133,37 @@ private class LiveAvcReceiver(private val surface: Surface) : Closeable {
 
     fun accept(frame: H264VideoFrame): LiveVideoUiState {
         received++
+        val payload = frame.payload()
         if (!synchronized) {
             if (!frame.isKeyFrame) {
-                dropped++
+                if (!H264AnnexBInspector.isCodecSetup(payload) || !queue(payload, MediaCodec.BUFFER_FLAG_CODEC_CONFIG)) {
+                    dropped++
+                }
                 return state()
             }
-            synchronized = true
         }
 
         val decoder = checkNotNull(codec)
         drain(decoder)
-        val inputIndex = decoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
-        if (inputIndex < 0) {
+        if (!queue(payload, if (frame.isKeyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)) {
             dropped++
             return state()
         }
-        val payload = frame.payload()
+        if (frame.isKeyFrame) synchronized = true
+        inputSequence++
+        drain(decoder)
+        return state()
+    }
+
+    private fun queue(payload: ByteArray, flags: Int): Boolean {
+        val decoder = checkNotNull(codec)
+        drain(decoder)
+        val inputIndex = decoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
+        if (inputIndex < 0) return false
         val input = checkNotNull(decoder.getInputBuffer(inputIndex))
         if (payload.size > input.capacity()) {
-            dropped++
             decoder.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs(), 0)
-            return state()
+            return false
         }
         input.clear()
         input.put(payload)
@@ -161,11 +172,9 @@ private class LiveAvcReceiver(private val surface: Surface) : Closeable {
             0,
             payload.size,
             presentationTimeUs(),
-            if (frame.isKeyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+            flags
         )
-        inputSequence++
-        drain(decoder)
-        return state()
+        return true
     }
 
     fun state(error: String? = null): LiveVideoUiState = LiveVideoUiState(

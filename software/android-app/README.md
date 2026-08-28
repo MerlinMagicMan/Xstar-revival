@@ -36,6 +36,19 @@ The Cockpit / FPV screen renders its telemetry HUD from `XStarState`. In MAVLink
 
 When the optional official SDK binding is present, the same cockpit decodes the SDK's documented receive-only H.264 callback. It waits for a keyframe, supplies the standard AVC stream to `MediaCodec`, and reports rendered/dropped frames beneath the HUD. No proprietary USB framing is inferred.
 
+### Passive bench capture
+
+The live source includes a deliberately bounded hardware-capture workflow for decoder bring-up:
+
+- it requires the official SDK, an app key, a connected product, and explicit confirmation that the propellers are removed;
+- it records only received H.264 callbacks and normalized telemetry for at most 30 seconds or 64 MB;
+- standard Annex-B SPS/PPS setup callbacks are retained before the first SDK-marked keyframe, while opaque pre-keyframe payloads remain unclassified and are dropped;
+- the frame index preserves the SDK callback timestamp as a source-defined opaque integer rather than guessing its unit;
+- telemetry export excludes GPS coordinates, controller opaque values, identifiers, app keys, warning text, and diagnostic notes; and
+- the resulting ZIP can be shared explicitly or its private H.264 stream replayed locally beneath the cockpit HUD.
+
+Camera imagery itself can still be identifying. Captures stay in the app cache, only the five newest archives are retained, and Android's share provider exposes only that capture directory.
+
 ## Optional live X-Star build
 
 The proprietary AAR and SDK app key are intentionally excluded from Git. Supply both only in your local environment:
@@ -76,4 +89,4 @@ App core provides a typed `AutelSdkBridge` observation contract and `H264VideoSo
 
 ## Safety
 
-There are no flight controls in this application. Current actions are connect, disconnect and read-only refresh only.
+There are no flight controls in this application. Current actions are connect, disconnect, read-only refresh, passive receive-only capture, and local replay only.

@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.Closeable
+import java.io.File
 
 enum class VideoReplayStatus { WAITING_FOR_SURFACE, PLAYING, ERROR }
 
@@ -41,6 +42,41 @@ data class VideoReplayUiState(
 fun H264ReplayVideo(
     modifier: Modifier = Modifier,
     @RawRes resourceId: Int = R.raw.xstar_synthetic_fpv,
+    onStateChanged: (VideoReplayUiState) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    H264ReplaySurface(
+        modifier = modifier,
+        streamKey = resourceId,
+        loadStream = {
+            withContext(Dispatchers.IO) {
+                context.resources.openRawResource(resourceId).use { it.readBytes() }
+            }
+        },
+        onStateChanged = onStateChanged
+    )
+}
+
+/** Replays the last private bench capture without reconnecting to the aircraft. */
+@Composable
+fun H264CapturedVideo(
+    videoPath: String,
+    modifier: Modifier = Modifier,
+    onStateChanged: (VideoReplayUiState) -> Unit
+) {
+    H264ReplaySurface(
+        modifier = modifier,
+        streamKey = videoPath,
+        loadStream = { withContext(Dispatchers.IO) { File(videoPath).readBytes() } },
+        onStateChanged = onStateChanged
+    )
+}
+
+@Composable
+private fun H264ReplaySurface(
+    modifier: Modifier,
+    streamKey: Any,
+    loadStream: suspend () -> ByteArray,
     onStateChanged: (VideoReplayUiState) -> Unit
 ) {
     val currentStateCallback by rememberUpdatedState(onStateChanged)
@@ -70,15 +106,12 @@ fun H264ReplayVideo(
         }
     )
 
-    val context = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(decoderSurface, resourceId) {
+    LaunchedEffect(decoderSurface, streamKey) {
         val surface = decoderSurface ?: run {
             currentStateCallback(VideoReplayUiState())
             return@LaunchedEffect
         }
-        val stream = withContext(Dispatchers.IO) {
-            context.resources.openRawResource(resourceId).use { it.readBytes() }
-        }
+        val stream = loadStream()
         val player = AnnexBMediaCodecPlayer(stream)
         try {
             player.playLoop(surface) { currentStateCallback(it) }
@@ -111,7 +144,7 @@ private class AnnexBMediaCodecPlayer(stream: ByteArray) : Closeable {
     val frameCount: Int get() = accessUnits.size
 
     suspend fun playLoop(surface: Surface, update: (VideoReplayUiState) -> Unit) = withContext(Dispatchers.Default) {
-        check(accessUnits.isNotEmpty()) { "The H.264 fixture contains no complete pictures" }
+        check(accessUnits.isNotEmpty()) { "The H.264 stream contains no complete pictures" }
         val decoder = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         codec = decoder
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, VIDEO_WIDTH, VIDEO_HEIGHT).apply {
