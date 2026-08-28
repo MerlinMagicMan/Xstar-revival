@@ -35,7 +35,7 @@ class OpenXStarPlatformAdapterTest {
             advanceUntilIdle()
 
             assertEquals("X-Star Premium", platform.state.value.aircraft.productName)
-            assertEquals(ConnectionState.Connected("test-usb", null), platform.state.value.connection)
+            assertEquals(ConnectionState.Connected("test-usb", "X-Star Premium"), platform.state.value.connection)
         } finally {
             platform.disconnect()
             advanceUntilIdle()

@@ -68,6 +68,8 @@ This allows:
 - protocol-decoder changes without needing the aircraft present;
 - side-by-side comparison of official-SDK and open-protocol behavior.
 
+The independent byte-stream path also has a synthetic capture fixture that is replayed in deliberately uneven chunks through `OpenXStarPlatformAdapter`. Standard MAVLink semantics are accepted only after message-specific CRC verification. Structurally plausible proprietary messages are counted as opaque; their CRC-extra values and field layouts are not inferred.
+
 ## Current normalized state
 
 - connection lifecycle
