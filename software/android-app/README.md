@@ -59,6 +59,12 @@ AUTEL_APP_KEY=your_registered_app_key \
 ./gradlew :app:assembleDebug
 ```
 
+The live screen reports controller USB presence separately from SDK authorization and aircraft
+product discovery. In addition to Autel's `Starlink` and `Autel Explorer` accessory identities,
+the app narrowly recognizes the exact legacy `ammlab.org / HelloADK / 1.0` identity observed from
+an X-Star Premium controller. Detection only reads Android's accessory inventory; it does not open
+the accessory or send control data.
+
 The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17` and contains both `arm64-v8a` and `armeabi-v7a` native libraries. When the file is absent, the `Live X-Star` source and all proprietary classes are omitted from the build.
 
 ## Adapter plan
