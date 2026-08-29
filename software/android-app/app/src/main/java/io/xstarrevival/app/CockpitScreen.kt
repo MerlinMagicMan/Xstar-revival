@@ -31,6 +31,7 @@ import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayStatus
 import io.xstarrevival.core.video.H264VideoFrame
+import io.xstarrevival.core.sim.SimulatorControlInput
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
 
@@ -47,6 +48,11 @@ fun CockpitScreen(
     heartbeat: HeartbeatUiState,
     liveVideoFrames: Flow<H264VideoFrame>,
     benchReplayVideoPath: String?,
+    onSimulatorControlsChanged: (SimulatorControlInput) -> Unit,
+    onSimulatorToggleArm: () -> Unit,
+    onSimulatorTakeOff: () -> Unit,
+    onSimulatorLand: () -> Unit,
+    onSimulatorToggleRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -56,6 +62,16 @@ fun CockpitScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         CockpitViewport(state, source, replayState, heartbeat, liveVideoFrames, benchReplayVideoPath)
+        if (source == TelemetrySource.SIMULATOR) {
+            SimulatorFlightControls(
+                state = state,
+                onControlsChanged = onSimulatorControlsChanged,
+                onToggleArm = onSimulatorToggleArm,
+                onTakeOff = onSimulatorTakeOff,
+                onLand = onSimulatorLand,
+                onToggleRecording = onSimulatorToggleRecording
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CockpitStatusCard(
                 title = "LINK",
@@ -75,6 +91,7 @@ fun CockpitScreen(
                 value = when (source) {
                     TelemetrySource.MOCK -> "MOCK"
                     TelemetrySource.MAVLINK_REPLAY -> "REPLAY"
+                    TelemetrySource.SIMULATOR -> "SIM"
                     TelemetrySource.OFFICIAL_AUTEL -> "LIVE"
                 },
                 modifier = Modifier.weight(1f)
@@ -83,6 +100,8 @@ fun CockpitScreen(
         Text(
             if (source == TelemetrySource.OFFICIAL_AUTEL)
                 "Live mode is receive-only: official SDK telemetry and camera frames can enter this view, but no flight-control commands exist."
+            else if (source == TelemetrySource.SIMULATOR)
+                "Simulator controls affect only the virtual aircraft in this app; there is no USB, radio, or live SDK command path."
             else
                 "The HUD is driven by normalized telemetry. Replay video is synthetic and clearly labeled.",
             style = MaterialTheme.typography.bodySmall
@@ -128,7 +147,8 @@ private fun CockpitViewport(
                         onStateChanged = { liveVideo = it }
                     )
             }
-            TelemetrySource.MOCK -> ArtificialHorizon(
+            TelemetrySource.MOCK,
+            TelemetrySource.SIMULATOR -> ArtificialHorizon(
                     rollDeg = state.attitude.rollDeg ?: 0.0,
                     pitchDeg = state.attitude.pitchDeg ?: 0.0,
                     modifier = Modifier.fillMaxSize()
@@ -196,6 +216,7 @@ private fun CockpitViewport(
                         "LOCAL BENCH REPLAY · RECEIVE ONLY"
                     }
                     TelemetrySource.MOCK -> "MOCK TELEMETRY"
+                    TelemetrySource.SIMULATOR -> "VIRTUAL X-STAR · SOFTWARE ONLY"
                 },
                 color = HudGreen,
                 style = MaterialTheme.typography.labelMedium,
@@ -205,6 +226,8 @@ private fun CockpitViewport(
             Text(
                 when {
                     source == TelemetrySource.MOCK -> "SYNTHETIC VIEW · NO CAMERA FRAMES"
+                    source == TelemetrySource.SIMULATOR ->
+                        "FLIGHT SIM · ${state.aircraft.flightMode ?: "GROUNDED"} · ${if (state.camera.recording == true) "REC" else "STANDBY"}"
                     source == TelemetrySource.OFFICIAL_AUTEL && benchReplayVideoPath != null &&
                         videoReplay.status == VideoReplayStatus.ERROR ->
                         "CAPTURE REPLAY ERROR · ${videoReplay.error ?: "UNKNOWN"}"

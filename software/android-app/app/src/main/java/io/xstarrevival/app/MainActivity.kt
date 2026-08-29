@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,7 @@ import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayStatus
+import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
                 val benchCapture by vm.benchCapture.collectAsStateWithLifecycle()
                 val controllerUsb by vm.controllerUsb.collectAsStateWithLifecycle()
+                val controllerProbe by vm.controllerProbe.collectAsStateWithLifecycle()
 
                 XStarApp(
                     state = state,
@@ -51,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     heartbeat = heartbeat,
                     liveReadiness = vm.liveReadiness,
                     controllerUsb = controllerUsb,
+                    controllerProbe = controllerProbe,
                     benchCapture = benchCapture,
                     liveVideoFrames = vm.liveVideoFrames,
                     onSourceSelected = vm::selectSource,
@@ -61,9 +65,16 @@ class MainActivity : ComponentActivity() {
                     onPauseReplay = vm::pauseReplay,
                     onRestartReplay = vm::restartReplay,
                     onReplaySpeedChanged = vm::setReplaySpeed,
+                    onSimulatorControlsChanged = vm::setSimulatorControls,
+                    onSimulatorToggleArm = vm::toggleSimulatorArm,
+                    onSimulatorTakeOff = vm::simulatorTakeOff,
+                    onSimulatorLand = vm::simulatorLand,
+                    onSimulatorToggleRecording = vm::toggleSimulatorRecording,
                     onStartBenchCapture = vm::startBenchCapture,
                     onStopBenchCapture = vm::stopBenchCapture,
-                    onShareBenchCapture = ::shareBenchCapture
+                    onShareBenchCapture = ::shareBenchCapture,
+                    onStartControllerProbe = vm::startControllerProbe,
+                    onStopControllerProbe = vm::stopControllerProbe
                 )
             }
         }
@@ -98,6 +109,7 @@ private fun XStarApp(
     heartbeat: HeartbeatUiState,
     liveReadiness: LiveReadinessUiState,
     controllerUsb: ControllerUsbUiState,
+    controllerProbe: ControllerProbeUiState,
     benchCapture: BenchCaptureUiState,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSourceSelected: (TelemetrySource) -> Unit,
@@ -108,9 +120,16 @@ private fun XStarApp(
     onPauseReplay: () -> Unit,
     onRestartReplay: () -> Unit,
     onReplaySpeedChanged: (Double) -> Unit,
+    onSimulatorControlsChanged: (SimulatorControlInput) -> Unit,
+    onSimulatorToggleArm: () -> Unit,
+    onSimulatorTakeOff: () -> Unit,
+    onSimulatorLand: () -> Unit,
+    onSimulatorToggleRecording: () -> Unit,
     onStartBenchCapture: () -> Unit,
     onStopBenchCapture: () -> Unit,
-    onShareBenchCapture: (String) -> Unit
+    onShareBenchCapture: (String) -> Unit,
+    onStartControllerProbe: () -> Unit,
+    onStopControllerProbe: () -> Unit
 ) {
     var selectedView by rememberSaveable { mutableStateOf(AppView.DASHBOARD) }
     var benchReplayVideoPath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -132,7 +151,10 @@ private fun XStarApp(
                 ConnectionBadge(state.connection)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 availableSources.forEach { option ->
                     FilterChip(
                         selected = source == option,
@@ -163,6 +185,12 @@ private fun XStarApp(
                 )
             }
             if (source == TelemetrySource.OFFICIAL_AUTEL) {
+                ControllerInputProbeControls(
+                    controllerUsb = controllerUsb,
+                    probe = controllerProbe,
+                    onStart = onStartControllerProbe,
+                    onStop = onStopControllerProbe
+                )
                 BenchCaptureControls(
                     connection = state.connection,
                     readiness = liveReadiness,
@@ -201,8 +229,56 @@ private fun XStarApp(
                 heartbeat = heartbeat,
                 liveVideoFrames = liveVideoFrames,
                 benchReplayVideoPath = benchReplayVideoPath,
+                onSimulatorControlsChanged = onSimulatorControlsChanged,
+                onSimulatorToggleArm = onSimulatorToggleArm,
+                onSimulatorTakeOff = onSimulatorTakeOff,
+                onSimulatorLand = onSimulatorLand,
+                onSimulatorToggleRecording = onSimulatorToggleRecording,
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+private fun ControllerInputProbeControls(
+    controllerUsb: ControllerUsbUiState,
+    probe: ControllerProbeUiState,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Controller input lab", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "Receive only · sends 0 bytes · limited to 20 seconds or 1 MB",
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                when (probe.status) {
+                    ControllerProbeStatus.IDLE -> "Ready to check for controller input traffic."
+                    ControllerProbeStatus.READING ->
+                        "Listening · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks · ${probe.elapsedMs / 1000}s"
+                    ControllerProbeStatus.COMPLETE ->
+                        "Complete · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks · ${probe.stopReason}"
+                    ControllerProbeStatus.ERROR -> "Probe error · ${probe.error ?: "unknown"}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (probe.status == ControllerProbeStatus.ERROR) MaterialTheme.colorScheme.error else LocalContentColor.current
+            )
+            probe.lastChunkHex?.let {
+                Text("Latest bytes · $it", style = MaterialTheme.typography.labelSmall)
+            }
+            if (probe.active) {
+                Button(onClick = onStop) { Text("Stop listening") }
+            } else {
+                Button(onClick = onStart, enabled = controllerUsb.controllerDetected) {
+                    Text("Listen for 20 seconds")
+                }
+            }
         }
     }
 }

@@ -15,6 +15,8 @@ import io.xstarrevival.core.protocol.mavlink.StandardMavlinkDecoder
 import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
+import io.xstarrevival.core.sim.SimulatorControlInput
+import io.xstarrevival.core.sim.SimulatorXStarPlatform
 import io.xstarrevival.core.video.H264VideoFrame
 import io.xstarrevival.core.video.H264CaptureStopReason
 import kotlinx.coroutines.CoroutineStart
@@ -32,6 +34,7 @@ import kotlinx.coroutines.yield
 enum class TelemetrySource(val label: String) {
     MOCK("Mock"),
     MAVLINK_REPLAY("MAVLink Replay"),
+    SIMULATOR("Flight Simulator"),
     OFFICIAL_AUTEL("Live X-Star")
 }
 
@@ -47,7 +50,9 @@ data class LiveReadinessUiState(
 
 class XStarViewModel(application: Application) : AndroidViewModel(application) {
     private val controllerUsbMonitor = ControllerUsbMonitor(application)
+    private val controllerUsbInputProbe = ControllerUsbInputProbe(application, viewModelScope)
     private val mockPlatform = MockXStarPlatform(viewModelScope)
+    private val simulatorPlatform = SimulatorXStarPlatform(viewModelScope)
     private val replayTransport = CaptureReplayTransport(
         scope = viewModelScope,
         chunks = StandardMavlinkDemoCapture.chunks,
@@ -63,6 +68,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     val availableSources: List<TelemetrySource> = buildList {
         add(TelemetrySource.MOCK)
         add(TelemetrySource.MAVLINK_REPLAY)
+        add(TelemetrySource.SIMULATOR)
         if (officialPlatform != null) add(TelemetrySource.OFFICIAL_AUTEL)
     }
     val liveVideoFrames: Flow<H264VideoFrame> = officialPlatform?.h264Frames ?: emptyFlow()
@@ -71,6 +77,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         appKeyConfigured = BuildConfig.AUTEL_APP_KEY.isNotBlank()
     )
     internal val controllerUsb: StateFlow<ControllerUsbUiState> = controllerUsbMonitor.state
+    internal val controllerProbe: StateFlow<ControllerProbeUiState> = controllerUsbInputProbe.state
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
@@ -117,12 +124,14 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
                 benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
+                controllerUsbInputProbe.stop(ControllerProbeStopReason.USER)
             }
             activePlatform.disconnect()
             mutableSource.value = value
             activePlatform = when (value) {
                 TelemetrySource.MOCK -> mockPlatform
                 TelemetrySource.MAVLINK_REPLAY -> replayPlatform
+                TelemetrySource.SIMULATOR -> simulatorPlatform
                 TelemetrySource.OFFICIAL_AUTEL -> checkNotNull(officialPlatform)
             }
             mutablePlatformName.value = activePlatform.name
@@ -141,6 +150,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
                 benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
+                controllerUsbInputProbe.stop(ControllerProbeStopReason.USER)
             }
             activePlatform.disconnect()
             resetHeartbeat()
@@ -169,6 +179,26 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setReplaySpeed(speed: Double) = replayTransport.setSpeed(speed)
 
+    fun setSimulatorControls(input: SimulatorControlInput) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setControls(input)
+    }
+
+    fun toggleSimulatorArm() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.toggleArm()
+    }
+
+    fun simulatorTakeOff() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.takeOff()
+    }
+
+    fun simulatorLand() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.land()
+    }
+
+    fun toggleSimulatorRecording() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.toggleRecording()
+    }
+
     fun startBenchCapture() {
         val ready = mutableSource.value == TelemetrySource.OFFICIAL_AUTEL &&
             BuildConfig.AUTEL_SDK_AVAILABLE &&
@@ -178,6 +208,14 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopBenchCapture() = benchCaptureManager.stop()
+
+    fun startControllerProbe() {
+        if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL && controllerUsb.value.controllerDetected) {
+            controllerUsbInputProbe.start()
+        }
+    }
+
+    fun stopControllerProbe() = controllerUsbInputProbe.stop()
 
     private suspend fun connectActivePlatform() {
         runCatching { activePlatform.connect() }
@@ -236,6 +274,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
+        controllerUsbInputProbe.close()
         replayTransport.pause()
         controllerUsbMonitor.close()
         super.onCleared()
