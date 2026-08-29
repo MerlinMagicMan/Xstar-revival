@@ -13,8 +13,14 @@ This is the product-facing Android application. Its public build includes mock a
 - remote-controller status
 - camera/video status and frame counter
 - diagnostic counters
+- software-only flight simulator with dual virtual sticks, takeoff/landing, gimbal, and camera state
 
 The mock backend changes telemetry continuously so lifecycle/state rendering can be developed and tested without X-Star hardware.
+
+The separate Flight Simulator source runs a deterministic local flight model. Its cockpit controls
+change only virtual state: the simulator module has no USB, radio, official-SDK, or open-transport
+dependency. Takeoff, landing, yaw, pitch, roll, altitude, gimbal tilt, battery load, position, and
+virtual recording state can therefore be exercised without an aircraft.
 
 ## Build
 
@@ -63,7 +69,10 @@ The live screen reports controller USB presence separately from SDK authorizatio
 product discovery. In addition to Autel's `Starlink` and `Autel Explorer` accessory identities,
 the app narrowly recognizes the exact legacy `ammlab.org / HelloADK / 1.0` identity observed from
 an X-Star Premium controller. Detection only reads Android's accessory inventory; it does not open
-the accessory or send control data.
+the accessory or send control data. A separate, explicitly started controller-input lab may open
+only the accessory input descriptor for 20 seconds or 1 MB and save received bytes to private app
+cache; its compile-time audit rejects any USB output path. The current aircraft-off bench result is
+zero received bytes, so no controller framing is inferred from it.
 
 The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17` and contains both `arm64-v8a` and `armeabi-v7a` native libraries. When the file is absent, the `Live X-Star` source and all proprietary classes are omitted from the build.
 
@@ -95,4 +104,6 @@ App core provides a typed `AutelSdkBridge` observation contract and `H264VideoSo
 
 ## Safety
 
-There are no flight controls in this application. Current actions are connect, disconnect, read-only refresh, passive receive-only capture, and local replay only.
+There are no live flight controls in this application. Current hardware actions are connect,
+disconnect, read-only refresh, and passive receive-only capture. Flight controls exist only inside
+the isolated local simulator and cannot reach a controller or aircraft transport.

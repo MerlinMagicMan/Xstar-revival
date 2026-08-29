@@ -92,7 +92,7 @@ internal class ControllerUsbMonitor(context: Context) : AutoCloseable {
     }
 
     fun refresh() {
-        val identities = usbManager.accessoryList.orEmpty().map { it.toIdentity() }
+        val identities = usbManager.accessoryList.orEmpty().map { it.toControllerUsbIdentity() }
         mutableState.value = ControllerUsbIdentityClassifier.classify(identities)
     }
 
@@ -100,13 +100,13 @@ internal class ControllerUsbMonitor(context: Context) : AutoCloseable {
         runCatching { applicationContext.unregisterReceiver(receiver) }
     }
 
-    private fun UsbAccessory.toIdentity() = ControllerUsbIdentity(
-        manufacturer = manufacturer.orEmpty(),
-        model = model.orEmpty(),
-        version = version.orEmpty()
-    )
-
     private companion object {
         const val AUTEL_USB_ACCESSORY_ATTACHED = "com.autel.sdk.action.USB_ACCESSORY_ATTACHED"
     }
 }
+
+internal fun UsbAccessory.toControllerUsbIdentity() = ControllerUsbIdentity(
+    manufacturer = manufacturer.orEmpty(),
+    model = model.orEmpty(),
+    version = version.orEmpty()
+)
