@@ -46,6 +46,7 @@ data class LiveReadinessUiState(
 )
 
 class XStarViewModel(application: Application) : AndroidViewModel(application) {
+    private val controllerUsbMonitor = ControllerUsbMonitor(application)
     private val mockPlatform = MockXStarPlatform(viewModelScope)
     private val replayTransport = CaptureReplayTransport(
         scope = viewModelScope,
@@ -69,6 +70,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         sdkIncluded = BuildConfig.AUTEL_SDK_AVAILABLE,
         appKeyConfigured = BuildConfig.AUTEL_APP_KEY.isNotBlank()
     )
+    internal val controllerUsb: StateFlow<ControllerUsbUiState> = controllerUsbMonitor.state
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
@@ -146,6 +148,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refresh() {
+        controllerUsbMonitor.refresh()
         viewModelScope.launch { activePlatform.refresh() }
     }
 
@@ -234,6 +237,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
         replayTransport.pause()
+        controllerUsbMonitor.close()
         super.onCleared()
     }
 

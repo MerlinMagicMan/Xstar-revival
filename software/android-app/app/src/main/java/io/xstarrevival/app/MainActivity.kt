@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
                 val replayState by vm.replayState.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
                 val benchCapture by vm.benchCapture.collectAsStateWithLifecycle()
+                val controllerUsb by vm.controllerUsb.collectAsStateWithLifecycle()
 
                 XStarApp(
                     state = state,
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
                     replayState = replayState,
                     heartbeat = heartbeat,
                     liveReadiness = vm.liveReadiness,
+                    controllerUsb = controllerUsb,
                     benchCapture = benchCapture,
                     liveVideoFrames = vm.liveVideoFrames,
                     onSourceSelected = vm::selectSource,
@@ -95,6 +97,7 @@ private fun XStarApp(
     replayState: CaptureReplayState,
     heartbeat: HeartbeatUiState,
     liveReadiness: LiveReadinessUiState,
+    controllerUsb: ControllerUsbUiState,
     benchCapture: BenchCaptureUiState,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSourceSelected: (TelemetrySource) -> Unit,
@@ -163,6 +166,7 @@ private fun XStarApp(
                 BenchCaptureControls(
                     connection = state.connection,
                     readiness = liveReadiness,
+                    controllerUsb = controllerUsb,
                     capture = benchCapture,
                     replayActive = benchReplayVideoPath != null,
                     onStart = {
@@ -207,6 +211,7 @@ private fun XStarApp(
 private fun BenchCaptureControls(
     connection: ConnectionState,
     readiness: LiveReadinessUiState,
+    controllerUsb: ControllerUsbUiState,
     capture: BenchCaptureUiState,
     replayActive: Boolean,
     onStart: () -> Unit,
@@ -224,9 +229,10 @@ private fun BenchCaptureControls(
         ) {
             Text("Passive bench capture", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Text(
-                "SDK ${readiness.sdkIncluded.readyLabel()} · App key ${readiness.appKeyConfigured.readyLabel()} · Product ${connected.readyLabel()}",
+                "Controller ${controllerUsb.controllerDetected.readyLabel()} · SDK ${readiness.sdkIncluded.readyLabel()} · App key ${readiness.appKeyConfigured.readyLabel()} · Aircraft ${connected.readyLabel()}",
                 style = MaterialTheme.typography.labelMedium
             )
+            ControllerUsbStatusText(controllerUsb)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = propsRemoved, onCheckedChange = { propsRemoved = it })
                 Text("I removed the propellers for powered bench testing.", style = MaterialTheme.typography.bodySmall)
@@ -272,6 +278,27 @@ private fun BenchCaptureControls(
             )
         }
     }
+}
+
+@Composable
+private fun ControllerUsbStatusText(state: ControllerUsbUiState) {
+    val identity = state.identity
+    val text = when (state.status) {
+        ControllerUsbStatus.DISCONNECTED -> "Controller USB not detected"
+        ControllerUsbStatus.XSTAR -> "Controller USB connected · ${identity?.model ?: "Autel accessory"}"
+        ControllerUsbStatus.XSTAR_LEGACY -> "Controller USB connected · legacy X-Star accessory (${identity?.model})"
+        ControllerUsbStatus.OTHER_ACCESSORY ->
+            "USB accessory present but not recognized · ${identity?.manufacturer} / ${identity?.model}"
+    }
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = when (state.status) {
+            ControllerUsbStatus.XSTAR, ControllerUsbStatus.XSTAR_LEGACY -> MaterialTheme.colorScheme.primary
+            ControllerUsbStatus.OTHER_ACCESSORY -> MaterialTheme.colorScheme.error
+            ControllerUsbStatus.DISCONNECTED -> LocalContentColor.current
+        }
+    )
 }
 
 private fun Boolean.readyLabel(): String = if (this) "READY" else "MISSING"
