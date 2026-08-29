@@ -25,6 +25,15 @@ internal enum class ControllerProbeStatus { IDLE, READING, COMPLETE, ERROR }
 
 internal enum class ControllerProbeStopReason { USER, DURATION_LIMIT, SIZE_LIMIT, END_OF_STREAM, ERROR }
 
+internal enum class ControllerInputLinkStatus {
+    DISCONNECTED,
+    USB_READY,
+    LISTENING,
+    STREAMING,
+    INPUT_STREAM_UNAVAILABLE,
+    ERROR
+}
+
 internal data class ControllerProbeUiState(
     val status: ControllerProbeStatus = ControllerProbeStatus.IDLE,
     val bytesRead: Long = 0,
@@ -37,6 +46,18 @@ internal data class ControllerProbeUiState(
 ) {
     val active: Boolean
         get() = status == ControllerProbeStatus.READING
+}
+
+internal fun controllerInputLinkStatus(
+    controllerUsb: ControllerUsbUiState,
+    probe: ControllerProbeUiState
+): ControllerInputLinkStatus = when {
+    !controllerUsb.controllerDetected -> ControllerInputLinkStatus.DISCONNECTED
+    probe.status == ControllerProbeStatus.ERROR -> ControllerInputLinkStatus.ERROR
+    probe.bytesRead > 0 -> ControllerInputLinkStatus.STREAMING
+    probe.status == ControllerProbeStatus.READING -> ControllerInputLinkStatus.LISTENING
+    probe.status == ControllerProbeStatus.COMPLETE -> ControllerInputLinkStatus.INPUT_STREAM_UNAVAILABLE
+    else -> ControllerInputLinkStatus.USB_READY
 }
 
 internal object ControllerProbeBounds {

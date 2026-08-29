@@ -247,6 +247,7 @@ private fun ControllerInputProbeControls(
     onStart: () -> Unit,
     onStop: () -> Unit
 ) {
+    val linkStatus = controllerInputLinkStatus(controllerUsb, probe)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -254,21 +255,28 @@ private fun ControllerInputProbeControls(
         ) {
             Text("Controller input lab", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Text(
-                "Receive only · sends 0 bytes · limited to 20 seconds or 1 MB",
+                "USB link and stick-data stream are checked separately",
                 style = MaterialTheme.typography.labelSmall
             )
+            ControllerUsbStatusText(controllerUsb)
             Text(
-                when (probe.status) {
-                    ControllerProbeStatus.IDLE -> "Ready to check for controller input traffic."
-                    ControllerProbeStatus.READING ->
-                        "Listening · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks · ${probe.elapsedMs / 1000}s"
-                    ControllerProbeStatus.COMPLETE ->
-                        "Complete · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks · ${probe.stopReason}"
-                    ControllerProbeStatus.ERROR -> "Probe error · ${probe.error ?: "unknown"}"
-                },
+                controllerInputLinkMessage(linkStatus, controllerUsb, probe),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (probe.status == ControllerProbeStatus.ERROR) MaterialTheme.colorScheme.error else LocalContentColor.current
+                color = if (linkStatus == ControllerInputLinkStatus.ERROR) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    LocalContentColor.current
+                }
             )
+            if (linkStatus == ControllerInputLinkStatus.INPUT_STREAM_UNAVAILABLE &&
+                controllerUsb.status == ControllerUsbStatus.XSTAR_LEGACY
+            ) {
+                Text(
+                    "The legacy Autel stack relays controller inputs through aircraft-side endpoints. " +
+                        "With the aircraft off, unavailable inputs are expected; this does not mean the sticks are bad.",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
             probe.lastChunkHex?.let {
                 Text("Latest bytes · $it", style = MaterialTheme.typography.labelSmall)
             }
@@ -276,10 +284,38 @@ private fun ControllerInputProbeControls(
                 Button(onClick = onStop) { Text("Stop listening") }
             } else {
                 Button(onClick = onStart, enabled = controllerUsb.controllerDetected) {
-                    Text("Listen for 20 seconds")
+                    Text(if (probe.status == ControllerProbeStatus.IDLE) "Check input stream" else "Check again")
                 }
             }
+            Text(
+                "Passive check only · sends 0 bytes · limited to 20 seconds or 1 MB",
+                style = MaterialTheme.typography.labelSmall
+            )
         }
+    }
+}
+
+private fun controllerInputLinkMessage(
+    status: ControllerInputLinkStatus,
+    controllerUsb: ControllerUsbUiState,
+    probe: ControllerProbeUiState
+): String = when (status) {
+    ControllerInputLinkStatus.DISCONNECTED -> "Connect the controller to check its input stream."
+    ControllerInputLinkStatus.USB_READY -> "USB accessory is connected; stick-data stream has not been checked."
+    ControllerInputLinkStatus.LISTENING ->
+        "Checking input stream · ${probe.elapsedMs / 1000}s"
+    ControllerInputLinkStatus.STREAMING ->
+        "Input stream active · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks"
+    ControllerInputLinkStatus.INPUT_STREAM_UNAVAILABLE ->
+        "USB accessory connected · controller input stream unavailable"
+    ControllerInputLinkStatus.ERROR -> "Input check error · ${probe.error ?: "unknown"}"
+}.let { message ->
+    if (controllerUsb.status == ControllerUsbStatus.XSTAR_LEGACY &&
+        status == ControllerInputLinkStatus.USB_READY
+    ) {
+        "$message Legacy X-Star controller recognized."
+    } else {
+        message
     }
 }
 
