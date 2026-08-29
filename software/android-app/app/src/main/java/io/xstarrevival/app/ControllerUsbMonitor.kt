@@ -69,7 +69,8 @@ internal class ControllerUsbMonitor(context: Context) : AutoCloseable {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 UsbManager.ACTION_USB_ACCESSORY_ATTACHED,
-                UsbManager.ACTION_USB_ACCESSORY_DETACHED -> refresh()
+                UsbManager.ACTION_USB_ACCESSORY_DETACHED,
+                AUTEL_USB_ACCESSORY_ATTACHED -> refresh()
             }
         }
     }
@@ -78,6 +79,8 @@ internal class ControllerUsbMonitor(context: Context) : AutoCloseable {
         val filter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
             addAction(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
+            // Autel's UsbStartActivity translates Android's attach intent to this broadcast.
+            addAction(AUTEL_USB_ACCESSORY_ATTACHED)
         }
         ContextCompat.registerReceiver(
             applicationContext,
@@ -102,4 +105,8 @@ internal class ControllerUsbMonitor(context: Context) : AutoCloseable {
         model = model.orEmpty(),
         version = version.orEmpty()
     )
+
+    private companion object {
+        const val AUTEL_USB_ACCESSORY_ATTACHED = "com.autel.sdk.action.USB_ACCESSORY_ATTACHED"
+    }
 }
