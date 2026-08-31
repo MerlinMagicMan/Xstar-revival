@@ -87,6 +87,12 @@ failure.
 battery use, projected reserve, and unsupported actions before execution. Simulator missions are
 limited to its 120 m model ceiling and explicitly reject unsupported waypoint actions.
 
+Waypoint missions support Hover, Land, and Return Home finish behaviors. Return Home keeps the
+mission command active after its final waypoint, publishes the shared dedicated RTH climb/return/
+landing state, and completes the mission only after touchdown at Home. Cancelling that RTH aborts
+the mission, while GPS, compass, Home Point, link-loss, and forced-landing scenarios produce an
+explicit mission failure instead of silently continuing autonomous navigation.
+
 ## Simulator smart flight
 
 The simulator command adapter implements reconciled Return-to-Home, Orbit, and Follow modes. RTH

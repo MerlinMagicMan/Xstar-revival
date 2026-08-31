@@ -69,6 +69,7 @@ fun GsMissionV2Screen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onAbort: () -> Unit,
+    onCancelRth: () -> Unit,
     onStartOrbit: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
     onStopOrbit: () -> Unit,
     onStartFollow: (Double, Double, Double) -> Unit,
@@ -117,6 +118,7 @@ fun GsMissionV2Screen(
                 onPause = onPause,
                 onResume = onResume,
                 onAbort = onAbort,
+                onCancelRth = onCancelRth,
                 modifier = Modifier.weight(1f)
             )
             GsMissionV2Mode.ORBIT -> OrbitEditor(
@@ -153,6 +155,7 @@ private fun PersistentWaypointPlanner(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onAbort: () -> Unit,
+    onCancelRth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -180,7 +183,7 @@ private fun PersistentWaypointPlanner(
         } else {
             MissionEditor(
                 state, active, onSave, onDelete, source, execution, commandStatus,
-                onStart, onPause, onResume, onAbort, Modifier.weight(1f).fillMaxHeight()
+                onStart, onPause, onResume, onAbort, onCancelRth, Modifier.weight(1f).fillMaxHeight()
             )
         }
     }
@@ -199,6 +202,7 @@ private fun MissionEditor(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onAbort: () -> Unit,
+    onCancelRth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by remember(original.id, original.waypoints.size) { mutableStateOf(original) }
@@ -210,9 +214,12 @@ private fun MissionEditor(
         start = state.navigation.latitudeDeg?.let { latitude ->
             state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
         },
+        home = state.navigation.homeLatitudeDeg?.let { latitude ->
+            state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+        },
         currentBatteryPercent = state.battery.percent,
         supportedActions = SimulatorMissionModel.supportedWaypointActions,
-        supportedFinishBehaviors = setOf(MissionFinishBehavior.HOVER, MissionFinishBehavior.LAND)
+        supportedFinishBehaviors = MissionFinishBehavior.entries.toSet()
     )
 
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -278,6 +285,25 @@ private fun MissionEditor(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text("FINISH BEHAVIOR", color = GsColors.Orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MissionFinishBehavior.entries.forEach { behavior ->
+                            if (draft.finishBehavior == behavior) {
+                                Button(onClick = { draft = draft.copy(finishBehavior = behavior) }) {
+                                    Text(behavior.name.replace('_', ' '))
+                                }
+                            } else {
+                                OutlinedButton(onClick = { draft = draft.copy(finishBehavior = behavior) }) {
+                                    Text(behavior.name.replace('_', ' '))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             Card(colors = CardDefaults.cardColors(containerColor = if (validation.canExecute) GsColors.Green.copy(alpha=.10f) else GsColors.Amber.copy(alpha=.10f))) {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
                     Text(if (validation.canExecute) "MISSION VALID" else "REVIEW REQUIRED", color = if (validation.canExecute) GsColors.Green else GsColors.Amber, fontWeight = FontWeight.Bold)
@@ -295,7 +321,7 @@ private fun MissionEditor(
                     }
                     if (execution.phase != MissionExecutionPhase.IDLE) {
                         Spacer(Modifier.height(8.dp))
-                        MissionExecutionPanel(execution, commandStatus, state, onPause, onResume, onAbort)
+                        MissionExecutionPanel(execution, commandStatus, state, onPause, onResume, onAbort, onCancelRth)
                     }
                 }
             }
@@ -317,6 +343,7 @@ private fun MissionEditor(
                     GsSettingLine("Projected battery", review.projectedBatteryPercent?.let { "$it%" } ?: "Unavailable")
                     GsSettingLine("Projected reserve margin", review.projectedReservePercent?.let { "$it%" } ?: "Unavailable")
                     GsSettingLine("Battery reserve", "${draft.minimumBatteryReservePercent}%")
+                    GsSettingLine("Finish behavior", draft.finishBehavior.name.replace('_', ' '))
                     val home = state.navigation.homeLatitudeDeg?.let { latitude ->
                         state.navigation.homeLongitudeDeg?.let { longitude -> "%.5f, %.5f".format(latitude, longitude) }
                     } ?: "Unavailable"
@@ -345,23 +372,30 @@ private fun MissionExecutionPanel(
     state: XStarState,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onAbort: () -> Unit
+    onAbort: () -> Unit,
+    onCancelRth: () -> Unit
 ) {
     Text("EXECUTION · ${execution.phase}", color = GsColors.Orange, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     GsSettingLine("Current / next", "${execution.currentWaypoint ?: "—"} / ${execution.nextWaypoint ?: "—"}")
     GsSettingLine("Progress", "${(execution.progress * 100).toInt()}%")
-    GsSettingLine("Remaining", execution.remainingDistanceM?.let { "%.0f m".format(it) } ?: "—")
+    GsSettingLine(
+        if (execution.returningHome) "Home distance" else "Remaining",
+        execution.remainingDistanceM?.let { "%.0f m".format(it) } ?: "—"
+    )
     GsSettingLine("ETA", execution.etaSeconds?.let { "%.0f s".format(it) } ?: "—")
     GsSettingLine("Battery / reserve", "${state.battery.percent ?: "—"}% / ${execution.minimumBatteryReservePercent ?: "—"}%")
     GsSettingLine("Command", commandStatus?.phase?.name ?: "IDLE")
     execution.detail?.let { Text(it, color = GsColors.Muted, fontSize = 9.sp) }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Button(onClick = onPause, enabled = execution.phase == MissionExecutionPhase.ACTIVE) { Text("PAUSE") }
+        Button(
+            onClick = onPause,
+            enabled = execution.phase == MissionExecutionPhase.ACTIVE && !execution.returningHome
+        ) { Text("PAUSE") }
         Button(onClick = onResume, enabled = execution.phase == MissionExecutionPhase.PAUSED) { Text("RESUME") }
         OutlinedButton(
-            onClick = onAbort,
+            onClick = if (execution.returningHome) onCancelRth else onAbort,
             enabled = execution.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)
-        ) { Text("ABORT") }
+        ) { Text(if (execution.returningHome) "CANCEL RTH" else "ABORT") }
     }
 }
 

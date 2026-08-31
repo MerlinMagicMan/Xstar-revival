@@ -45,6 +45,11 @@ warnings, and unsupported actions. During execution it shows current/next waypoi
 remaining distance, ETA, battery/reserve, and command state, with dispatcher-backed Pause, Resume,
 and Abort controls. Live and replay sources remain planning-only.
 
+Mission-level finish behavior is configurable as Hover, Return Home, or Land. Review estimates
+include the return leg and landing time when Return Home is selected. During the finish sequence,
+the mission panel switches from waypoint progress to Home distance/ETA, the cockpit shows the
+dedicated RTH state, Pause is disabled, and Cancel RTH safely aborts the mission.
+
 Simulator RTH now uses an explicit confirmation and reports climb, return, landing, and completion
 progress in the cockpit. Orbit and Follow editors provide simulator-only review/start flows and
 active-state Stop controls. Orbit reviews radius, altitude, speed, direction, laps, and POI; Follow

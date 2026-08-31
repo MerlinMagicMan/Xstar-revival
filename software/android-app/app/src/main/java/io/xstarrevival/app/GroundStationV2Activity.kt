@@ -164,6 +164,7 @@ private fun GroundStationV2App(
                     onPause = onPauseMission,
                     onResume = onResumeMission,
                     onAbort = onAbortMission,
+                    onCancelRth = onCancelRth,
                     onStartOrbit = onStartOrbit,
                     onStopOrbit = onStopOrbit,
                     onStartFollow = onStartFollow,
