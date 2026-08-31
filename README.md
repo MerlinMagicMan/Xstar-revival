@@ -77,6 +77,16 @@ Static inspection of the legacy Starlink APK shows strong evidence of:
 
 Official Autel SDK source independently confirms X-Star/X-Star Premium product interfaces and video, battery, flight-controller, remote-controller, gimbal, DSP and mission modules.
 
+## Preservation
+
+Preservation is a first-class project deliverable. Original Autel artifacts are retained privately with hashes and provenance; public Git history contains metadata, reproducible research, clean-room specifications and analysis tools unless redistribution rights for an original artifact are clear.
+
+See:
+
+- [`docs/PRESERVATION-ARCHIVE.md`](docs/PRESERVATION-ARCHIVE.md) — archive model, provenance rules and public/private boundary
+- [`docs/ARTIFACT-INVENTORY.md`](docs/ARTIFACT-INVENTORY.md) — canonical hashes and recovered artifact records
+- [`docs/COMMUNITY-RESEARCH-INDEX.md`](docs/COMMUNITY-RESEARCH-INDEX.md) — forum/community findings with confidence and reproduction status
+
 ## Research / Product Index
 
 - [`docs/FEATURE-ROADMAP.md`](docs/FEATURE-ROADMAP.md) — authoritative feature roadmap and phased product strategy
@@ -84,6 +94,10 @@ Official Autel SDK source independently confirms X-Star/X-Star Premium product i
 - [`docs/RESEARCH-DOSSIER-2026-08.md`](docs/RESEARCH-DOSSIER-2026-08.md) — consolidated feasibility findings
 - [`docs/OFFICIAL-AUTEL-SDK-PATH.md`](docs/OFFICIAL-AUTEL-SDK-PATH.md) — official SDK opportunity and decision tree
 - [`docs/XSTAR-SDK-CAPABILITY-MATRIX.md`](docs/XSTAR-SDK-CAPABILITY-MATRIX.md) — exhaustive X-Star SDK read/write capability and safety classification
+- [`docs/BATTERY-V607-INNER-IMAGE.md`](docs/BATTERY-V607-INNER-IMAGE.md) — Battery V6.07 inner-image characterization
+- [`docs/BATTERY-V521-V607-DIFFERENTIAL.md`](docs/BATTERY-V521-V607-DIFFERENTIAL.md) — reproducible V5.21 vs V6.07 differential/cipher-candidate analysis
+- [`docs/PRESERVATION-ARCHIVE.md`](docs/PRESERVATION-ARCHIVE.md) — preservation architecture and provenance policy
+- [`docs/COMMUNITY-RESEARCH-INDEX.md`](docs/COMMUNITY-RESEARCH-INDEX.md) — indexed community evidence and reproduction state
 - [`docs/LEGACY-TABLET-PRESERVATION.md`](docs/LEGACY-TABLET-PRESERVATION.md) — golden-reference tablet capture procedure
 - [`docs/RADIO-AND-TRANSPORT.md`](docs/RADIO-AND-TRANSPORT.md) — USB, proxy and RF architecture
 - [`docs/FLIGHT-LOG-FORMAT.md`](docs/FLIGHT-LOG-FORMAT.md) — PX4-derived log research
