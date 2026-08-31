@@ -10,19 +10,27 @@ import io.xstarrevival.core.adapter.AutelSdkPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
+import io.xstarrevival.core.command.CancelReturnToHomeCommand
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.LandCommand
 import io.xstarrevival.core.command.PauseMissionCommand
 import io.xstarrevival.core.command.ResumeMissionCommand
+import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
+import io.xstarrevival.core.command.StartFollowCommand
+import io.xstarrevival.core.command.StartOrbitCommand
+import io.xstarrevival.core.command.StopFollowCommand
+import io.xstarrevival.core.command.StopOrbitCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakeoffCommand
 import io.xstarrevival.core.mock.MockXStarPlatform
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionPlan
+import io.xstarrevival.core.groundstation.GeoPoint
+import io.xstarrevival.core.groundstation.SmartFlightExecutionState
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.protocol.mavlink.StandardMavlinkDecoder
@@ -125,6 +133,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     val commandStatus: StateFlow<CommandStatus?> = simulatorCommands.latest
     val simulatorScenario: StateFlow<SimulatorScenario> = simulatorPlatform.scenario
     val missionExecution: StateFlow<MissionExecutionState> = simulatorPlatform.missionExecution
+    val smartFlightExecution: StateFlow<SmartFlightExecutionState> = simulatorPlatform.smartFlightExecution
 
     private val mutableHeartbeat = MutableStateFlow(HeartbeatUiState())
     val heartbeat: StateFlow<HeartbeatUiState> = mutableHeartbeat.asStateFlow()
@@ -229,6 +238,41 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun abortSimulatorMission() {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(AbortMissionCommand)
+    }
+
+    fun startSimulatorRth() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(ReturnToHomeCommand)
+    }
+
+    fun cancelSimulatorRth() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(CancelReturnToHomeCommand)
+    }
+
+    fun startSimulatorOrbit(
+        pointOfInterest: GeoPoint,
+        radiusM: Double,
+        altitudeM: Double,
+        speedMps: Double,
+        clockwise: Boolean,
+        laps: Int
+    ) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(StartOrbitCommand(pointOfInterest, radiusM, altitudeM, speedMps, clockwise, laps))
+        }
+    }
+
+    fun stopSimulatorOrbit() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopOrbitCommand)
+    }
+
+    fun startSimulatorFollow(distanceM: Double, altitudeM: Double, speedMps: Double) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(StartFollowCommand(distanceM, altitudeM, speedMps))
+        }
+    }
+
+    fun stopSimulatorFollow() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopFollowCommand)
     }
 
     fun toggleSimulatorArm() {

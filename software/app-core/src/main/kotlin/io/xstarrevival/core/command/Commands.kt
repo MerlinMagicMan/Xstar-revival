@@ -75,10 +75,16 @@ data class StartOrbitCommand(
     val radiusM: Double,
     val altitudeM: Double,
     val speedMps: Double,
-    val clockwise: Boolean
+    val clockwise: Boolean,
+    val laps: Int = 1
 ) : SmartFlightCommand { override val kind = CommandKind.START_ORBIT }
 data object StopOrbitCommand : SmartFlightCommand { override val kind = CommandKind.STOP_ORBIT }
-data class StartFollowCommand(val distanceM: Double, val altitudeM: Double) : SmartFlightCommand {
+data class StartFollowCommand(
+    val distanceM: Double,
+    val altitudeM: Double,
+    val speedMps: Double = 5.0,
+    val target: GeoPoint? = null
+) : SmartFlightCommand {
     override val kind = CommandKind.START_FOLLOW
 }
 data object StopFollowCommand : SmartFlightCommand { override val kind = CommandKind.STOP_FOLLOW }

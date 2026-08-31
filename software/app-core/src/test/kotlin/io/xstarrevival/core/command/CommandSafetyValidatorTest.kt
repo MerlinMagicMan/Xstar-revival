@@ -10,6 +10,7 @@ import io.xstarrevival.core.model.RemoteState
 import io.xstarrevival.core.model.Severity
 import io.xstarrevival.core.model.WarningState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.groundstation.GeoPoint
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -121,6 +122,46 @@ class CommandSafetyValidatorTest {
         assertFalse(disarm.canDispatch)
         assertTrue(takeoff.issues.any { it.message == "Altitude state is unavailable" })
         assertTrue(disarm.issues.any { it.message == "Altitude state is unavailable" })
+    }
+
+    @Test
+    fun `rth can override an active autonomous command`() {
+        val airborne = healthyState().copy(
+            aircraft = AircraftState(armed = true, flightMode = "WAYPOINT MISSION"),
+            navigation = healthyState().navigation.copy(altitudeM = 20.0)
+        )
+
+        val result = validator.validate(
+            ReturnToHomeCommand,
+            airborne,
+            setOf(CommandKind.RETURN_TO_HOME),
+            activeCommands = setOf(CommandKind.START_WAYPOINT_MISSION)
+        )
+
+        assertTrue(result.canDispatch)
+    }
+
+    @Test
+    fun `orbit and follow parameters remain bounded`() {
+        val airborne = healthyState().copy(
+            aircraft = AircraftState(armed = true, flightMode = "FLYING"),
+            navigation = healthyState().navigation.copy(altitudeM = 20.0)
+        )
+        val orbit = validator.validate(
+            StartOrbitCommand(GeoPoint(35.0, -97.0), 20.0, 20.0, 5.0, true, laps = 0),
+            airborne,
+            setOf(CommandKind.START_ORBIT)
+        )
+        val follow = validator.validate(
+            StartFollowCommand(20.0, 20.0, speedMps = 20.0),
+            airborne,
+            setOf(CommandKind.START_FOLLOW)
+        )
+
+        assertFalse(orbit.canDispatch)
+        assertTrue(orbit.issues.any { it.message.contains("laps") })
+        assertFalse(follow.canDispatch)
+        assertTrue(follow.issues.any { it.message.contains("speed") })
     }
 
     private fun healthyState() = XStarState(

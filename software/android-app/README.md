@@ -45,6 +45,12 @@ warnings, and unsupported actions. During execution it shows current/next waypoi
 remaining distance, ETA, battery/reserve, and command state, with dispatcher-backed Pause, Resume,
 and Abort controls. Live and replay sources remain planning-only.
 
+Simulator RTH now uses an explicit confirmation and reports climb, return, landing, and completion
+progress in the cockpit. Orbit and Follow editors provide simulator-only review/start flows and
+active-state Stop controls. Orbit reviews radius, altitude, speed, direction, laps, and POI; Follow
+reviews the simulated operator target, offset, altitude, speed, and target-loss behavior. No live
+smart-flight command transport is enabled.
+
 ## Build
 
 From this directory:

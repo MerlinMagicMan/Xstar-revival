@@ -5,6 +5,10 @@ import io.xstarrevival.core.groundstation.MissionExecutionPhase
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionFinishBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
+import io.xstarrevival.core.groundstation.GeoPoint
+import io.xstarrevival.core.groundstation.SmartFlightExecutionState
+import io.xstarrevival.core.groundstation.SmartFlightMode
+import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import kotlinx.coroutines.CoroutineScope
@@ -31,12 +35,15 @@ class SimulatorXStarPlatform(
     val scenario: StateFlow<SimulatorScenario> = mutableScenario.asStateFlow()
     private val mutableMissionExecution = MutableStateFlow(MissionExecutionState())
     val missionExecution: StateFlow<MissionExecutionState> = mutableMissionExecution.asStateFlow()
+    private val mutableSmartFlightExecution = MutableStateFlow(SmartFlightExecutionState())
+    val smartFlightExecution: StateFlow<SmartFlightExecutionState> = mutableSmartFlightExecution.asStateFlow()
 
     private var snapshot = SimulatorSnapshot()
     private var input = SimulatorControlInput()
     private var ticker: Job? = null
     private var frozenLinkLossState: XStarState? = null
     private var missionRuntime: SimulatorMissionRuntime? = null
+    private var smartFlightRuntime: SimulatorSmartFlightRuntime? = null
 
     override suspend fun connect() {
         ticker?.cancel()
@@ -46,6 +53,8 @@ class SimulatorXStarPlatform(
         mutableScenario.value = SimulatorScenario.NORMAL_FLIGHT
         missionRuntime = null
         mutableMissionExecution.value = MissionExecutionState()
+        smartFlightRuntime = null
+        mutableSmartFlightExecution.value = SmartFlightExecutionState()
         publish()
         ticker = scope.launch {
             while (isActive) {
@@ -53,7 +62,7 @@ class SimulatorXStarPlatform(
                 val missionControlsLocked = missionRuntime?.phase in setOf(
                     MissionExecutionPhase.ACTIVE,
                     MissionExecutionPhase.PAUSED
-                )
+                ) || smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE
                 snapshot = SimulatorFlightModel.step(
                     snapshot,
                     if (missionControlsLocked) SimulatorControlInput() else input,
@@ -63,6 +72,11 @@ class SimulatorXStarPlatform(
                     val result = SimulatorMissionModel.step(snapshot, runtime, tickMs / 1000.0)
                     snapshot = result.snapshot
                     missionRuntime = result.runtime
+                }
+                smartFlightRuntime?.let { runtime ->
+                    val result = SimulatorSmartFlightModel.step(snapshot, runtime, tickMs / 1000.0)
+                    snapshot = result.snapshot
+                    smartFlightRuntime = result.runtime
                 }
                 publish()
             }
@@ -76,6 +90,8 @@ class SimulatorXStarPlatform(
         frozenLinkLossState = null
         missionRuntime = null
         mutableMissionExecution.value = MissionExecutionState()
+        smartFlightRuntime = null
+        mutableSmartFlightExecution.value = SmartFlightExecutionState()
         mutableState.value = XStarState(connection = ConnectionState.Disconnected)
     }
 
@@ -173,8 +189,64 @@ class SimulatorXStarPlatform(
         return true
     }
 
+    fun startReturnToHome(): Boolean {
+        if (smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE) return false
+        val runtime = missionRuntime
+        if (runtime != null && runtime.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) {
+            missionRuntime = SimulatorMissionModel.abort(runtime, "Mission interrupted by Return-to-Home")
+        }
+        input = SimulatorControlInput()
+        smartFlightRuntime = SimulatorSmartFlightModel.startRth(snapshot)
+        publish()
+        return true
+    }
+
+    fun cancelReturnToHome(): Boolean = cancelSmartFlight(SmartFlightMode.RETURN_TO_HOME, "Return-to-Home cancelled")
+
+    fun startOrbit(
+        center: GeoPoint,
+        radiusM: Double,
+        altitudeM: Double,
+        speedMps: Double,
+        clockwise: Boolean,
+        laps: Int
+    ): Boolean {
+        if (!canStartSmartFlight()) return false
+        input = SimulatorControlInput()
+        smartFlightRuntime = SimulatorSmartFlightModel.startOrbit(
+            snapshot, center, radiusM, altitudeM, speedMps, clockwise, laps
+        )
+        publish()
+        return true
+    }
+
+    fun stopOrbit(): Boolean = cancelSmartFlight(SmartFlightMode.ORBIT, "Orbit stopped")
+
+    fun startFollow(distanceM: Double, altitudeM: Double, speedMps: Double, target: GeoPoint?): Boolean {
+        if (!canStartSmartFlight()) return false
+        input = SimulatorControlInput()
+        smartFlightRuntime = SimulatorSmartFlightModel.startFollow(distanceM, altitudeM, speedMps, target)
+        publish()
+        return true
+    }
+
+    fun stopFollow(): Boolean = cancelSmartFlight(SmartFlightMode.FOLLOW, "Follow stopped")
+
+    private fun canStartSmartFlight(): Boolean =
+        smartFlightRuntime?.phase != SmartFlightPhase.ACTIVE &&
+            missionRuntime?.phase !in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)
+
+    private fun cancelSmartFlight(mode: SmartFlightMode, detail: String): Boolean {
+        val runtime = smartFlightRuntime ?: return false
+        if (runtime.mode != mode || runtime.phase != SmartFlightPhase.ACTIVE) return false
+        smartFlightRuntime = SimulatorSmartFlightModel.cancel(runtime, detail)
+        publish()
+        return true
+    }
+
     fun setScenario(value: SimulatorScenario) {
         if (value == mutableScenario.value) return
+        val missionWasActive = missionRuntime?.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)
         frozenLinkLossState = if (value in LINK_LOSS_SCENARIOS) {
             normalizedBaseState()
         } else {
@@ -195,11 +267,34 @@ class SimulatorXStarPlatform(
             }
             else -> missionRuntime
         }
+        smartFlightRuntime = when (value) {
+            SimulatorScenario.GPS_LOST,
+            SimulatorScenario.COMPASS_FAILURE,
+            SimulatorScenario.COMPLETE_LINK_LOSS,
+            SimulatorScenario.CONNECTION_LOSS_DURING_MISSION -> smartFlightRuntime?.let {
+                SimulatorSmartFlightModel.fail(it, "${value.label} interrupted smart flight")
+            }
+            SimulatorScenario.HOME_UNAVAILABLE -> smartFlightRuntime?.let {
+                if (it.mode == SmartFlightMode.RETURN_TO_HOME) {
+                    SimulatorSmartFlightModel.fail(it, "Home Point became unavailable")
+                } else it
+            }
+            SimulatorScenario.FORCED_LANDING -> smartFlightRuntime?.let {
+                SimulatorSmartFlightModel.cancel(it, "Forced landing interrupted smart flight")
+            }
+            SimulatorScenario.RTH_DURING_MISSION -> {
+                if (missionWasActive && snapshot.phase != SimulatorFlightPhase.GROUNDED) {
+                    SimulatorSmartFlightModel.startRth(snapshot)
+                } else smartFlightRuntime
+            }
+            else -> smartFlightRuntime
+        }
         publish()
     }
 
     private fun publish() {
         mutableMissionExecution.value = SimulatorMissionModel.state(snapshot, missionRuntime)
+        mutableSmartFlightExecution.value = SimulatorSmartFlightModel.state(snapshot, smartFlightRuntime)
         mutableState.value = SimulatorScenarioApplier.apply(
             frozenLinkLossState ?: normalizedBaseState(),
             mutableScenario.value
@@ -209,10 +304,18 @@ class SimulatorXStarPlatform(
     private fun normalizedBaseState(): XStarState {
         val base = SimulatorFlightModel.toXStarState(snapshot)
         val missionPhase = missionRuntime?.phase
-        val mode = when (missionPhase) {
-            MissionExecutionPhase.ACTIVE -> "WAYPOINT MISSION"
-            MissionExecutionPhase.PAUSED -> "MISSION PAUSED"
-            else -> null
+        val mode = when {
+            smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE -> when (smartFlightRuntime?.mode) {
+                SmartFlightMode.RETURN_TO_HOME -> "RETURN TO HOME"
+                SmartFlightMode.ORBIT -> "ORBIT"
+                SmartFlightMode.FOLLOW -> "FOLLOW"
+                else -> null
+            }
+            else -> when (missionPhase) {
+                MissionExecutionPhase.ACTIVE -> "WAYPOINT MISSION"
+                MissionExecutionPhase.PAUSED -> "MISSION PAUSED"
+                else -> null
+            }
         }
         return if (mode == null) base else base.copy(aircraft = base.aircraft.copy(flightMode = mode))
     }

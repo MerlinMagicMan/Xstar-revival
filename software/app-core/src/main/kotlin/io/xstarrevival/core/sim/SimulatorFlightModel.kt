@@ -15,6 +15,7 @@ import io.xstarrevival.core.model.XStarState
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.sin
 
 /** Normalized inputs used only by the in-app simulator. No hardware transport consumes this type. */
@@ -165,7 +166,8 @@ object SimulatorFlightModel {
 
         val gimbalPitch = (snapshot.gimbalPitchDeg + input.gimbal * GIMBAL_RATE_DPS * dt)
             .coerceIn(-90.0, 30.0)
-        val load = if (airborne) 0.010 + horizontalSpeed * 0.0015 + abs(verticalSpeed) * 0.002 else 0.001
+        val loadSpeed = max(horizontalSpeed, snapshot.groundSpeedMps)
+        val load = if (airborne) 0.010 + loadSpeed * 0.0015 + abs(verticalSpeed) * 0.002 else 0.001
 
         return snapshot.copy(
             phase = phase,

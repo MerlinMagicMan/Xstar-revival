@@ -38,6 +38,8 @@ import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionPlan
+import io.xstarrevival.core.groundstation.GeoPoint
+import io.xstarrevival.core.groundstation.SmartFlightExecutionState
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.sim.SimulatorScenario
@@ -56,12 +58,17 @@ class GroundStationV2Activity : ComponentActivity() {
                 val commandStatus by vm.commandStatus.collectAsStateWithLifecycle()
                 val simulatorScenario by vm.simulatorScenario.collectAsStateWithLifecycle()
                 val missionExecution by vm.missionExecution.collectAsStateWithLifecycle()
+                val smartFlightExecution by vm.smartFlightExecution.collectAsStateWithLifecycle()
                 GroundStationV2App(
-                    state, source, heartbeat, commandStatus, simulatorScenario, missionExecution, vm.availableSources, vm.liveVideoFrames,
+                    state, source, heartbeat, commandStatus, simulatorScenario, missionExecution, smartFlightExecution,
+                    vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
                     vm::setSimulatorScenario, vm::startSimulatorMission, vm::pauseSimulatorMission,
-                    vm::resumeSimulatorMission, vm::abortSimulatorMission
+                    vm::resumeSimulatorMission, vm::abortSimulatorMission,
+                    vm::startSimulatorRth, vm::cancelSimulatorRth,
+                    vm::startSimulatorOrbit, vm::stopSimulatorOrbit,
+                    vm::startSimulatorFollow, vm::stopSimulatorFollow
                 )
             }
         }
@@ -76,6 +83,7 @@ private fun GroundStationV2App(
     commandStatus: CommandStatus?,
     simulatorScenario: SimulatorScenario,
     missionExecution: MissionExecutionState,
+    smartFlightExecution: SmartFlightExecutionState,
     availableSources: List<TelemetrySource>,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSource: (TelemetrySource) -> Unit,
@@ -90,7 +98,13 @@ private fun GroundStationV2App(
     onStartMission: (MissionPlan) -> Unit,
     onPauseMission: () -> Unit,
     onResumeMission: () -> Unit,
-    onAbortMission: () -> Unit
+    onAbortMission: () -> Unit,
+    onStartRth: () -> Unit,
+    onCancelRth: () -> Unit,
+    onStartOrbit: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
+    onStopOrbit: () -> Unit,
+    onStartFollow: (Double, Double, Double) -> Unit,
+    onStopFollow: () -> Unit
 ) {
     var page by rememberSaveable { mutableStateOf(GsPage.GARAGE) }
     val context = LocalContext.current
@@ -126,20 +140,25 @@ private fun GroundStationV2App(
                     { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS }
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
-                    state, source, heartbeat, commandStatus, simulatorScenario, liveVideoFrames,
+                    state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
-                    onSimulatorScenario,
+                    onSimulatorScenario, onStartRth, onCancelRth,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionV2Screen(
                     state = state,
                     source = source,
                     execution = missionExecution,
+                    smartFlight = smartFlightExecution,
                     commandStatus = commandStatus,
                     onStart = onStartMission,
                     onPause = onPauseMission,
                     onResume = onResumeMission,
-                    onAbort = onAbortMission
+                    onAbort = onAbortMission,
+                    onStartOrbit = onStartOrbit,
+                    onStopOrbit = onStopOrbit,
+                    onStartFollow = onStartFollow,
+                    onStopFollow = onStopFollow
                 )
                 GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
