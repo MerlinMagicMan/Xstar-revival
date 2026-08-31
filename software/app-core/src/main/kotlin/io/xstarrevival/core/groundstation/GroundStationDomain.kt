@@ -1,6 +1,8 @@
 package io.xstarrevival.core.groundstation
 
 import io.xstarrevival.core.model.BatteryState
+import io.xstarrevival.core.model.ConnectionState
+import io.xstarrevival.core.model.Severity
 import io.xstarrevival.core.model.XStarState
 import kotlin.math.max
 import kotlin.math.min
@@ -73,12 +75,29 @@ object MissionValidator {
         }
 
         aircraft?.let { state ->
+            if (state.connection !is ConnectionState.Connected) {
+                issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Aircraft is not connected")
+            }
             val battery = state.battery.percent
-            if (battery != null && battery <= plan.minimumBatteryReservePercent) {
-                issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Aircraft battery is already at or below mission reserve")
+            when {
+                battery == null -> issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Aircraft battery state is unavailable")
+                battery <= plan.minimumBatteryReservePercent -> {
+                    issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Aircraft battery is already at or below mission reserve")
+                }
             }
             val satellites = state.navigation.satellites
-            if (satellites != null && satellites < 6) issues += MissionIssue(MissionIssueSeverity.BLOCKING, "GPS satellite count is too low for autonomous flight")
+            when {
+                satellites == null -> issues += MissionIssue(MissionIssueSeverity.BLOCKING, "GPS satellite state is unavailable")
+                satellites < 6 -> issues += MissionIssue(MissionIssueSeverity.BLOCKING, "GPS satellite count is too low for autonomous flight")
+            }
+            when (state.remote.connected) {
+                true -> Unit
+                false -> issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Remote controller is disconnected")
+                null -> issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Remote controller state is unavailable")
+            }
+            if (state.warnings.any { it.severity == Severity.CRITICAL }) {
+                issues += MissionIssue(MissionIssueSeverity.BLOCKING, "Aircraft has an active critical warning")
+            }
         }
         return MissionValidation(issues)
     }

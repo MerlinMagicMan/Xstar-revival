@@ -14,6 +14,11 @@ This is the product-facing Android application. Its public build includes mock a
 - camera/video status and frame counter
 - diagnostic counters
 - software-only flight simulator with dual virtual sticks, takeoff/landing, gimbal, and camera state
+- local flight summaries with bounded, normalized telemetry-path replay for the 50 newest flights
+- last-known-aircraft path history with handoff to an installed maps application
+
+Older summaries created before replay sampling was introduced remain readable and are explicitly
+shown as having no replay samples; the UI never substitutes a fabricated path.
 
 The mock backend changes telemetry continuously so lifecycle/state rendering can be developed and tested without X-Star hardware.
 

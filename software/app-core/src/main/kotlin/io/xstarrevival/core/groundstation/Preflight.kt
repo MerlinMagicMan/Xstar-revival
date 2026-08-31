@@ -15,8 +15,13 @@ data class PreflightCheck(
 
 data class PreflightReport(
     val checks: List<PreflightCheck>,
-    val readyToFly: Boolean = checks.none { it.level == PreflightLevel.BLOCKER }
+    val readyToFly: Boolean = checks.none { it.level == PreflightLevel.BLOCKER } &&
+        REQUIRED_CHECKS.all { requiredId ->
+            checks.any { it.id == requiredId && it.level != PreflightLevel.UNAVAILABLE }
+        }
 )
+
+private val REQUIRED_CHECKS = setOf("connection", "gps", "rc", "battery", "warnings")
 
 object PreflightEvaluator {
     fun evaluate(state: XStarState): PreflightReport {
@@ -35,7 +40,7 @@ object PreflightEvaluator {
         checks += when (state.remote.connected) {
             true -> PreflightCheck("rc", "Remote controller", PreflightLevel.PASS, state.remote.signalPercent?.let { "$it% signal" })
             false -> PreflightCheck("rc", "Remote controller", PreflightLevel.BLOCKER, "Disconnected")
-            null -> PreflightCheck("rc", "Remote controller", if (connected) PreflightLevel.ADVISORY else PreflightLevel.UNAVAILABLE, "State unavailable")
+            null -> PreflightCheck("rc", "Remote controller", PreflightLevel.UNAVAILABLE, "State unavailable")
         }
 
         val batteryPercent = state.battery.percent

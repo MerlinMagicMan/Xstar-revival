@@ -25,7 +25,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,6 +44,7 @@ import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 import kotlin.math.max
 
 enum class GsRecordsTab { FLIGHTS, FIND_AIRCRAFT }
@@ -116,6 +119,26 @@ private fun FlightListV2(records: List<PersistedFlightSummary>, onSelect: (Persi
 
 @Composable
 private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Modifier) {
+    val samples = record.samples
+    var replayIndex by remember(record.startedAtEpochMs) { mutableIntStateOf(0) }
+    var playing by remember(record.startedAtEpochMs) { mutableStateOf(false) }
+    val currentSample = samples.getOrNull(replayIndex)
+    val positionedSamples = samples.mapIndexedNotNull { index, sample ->
+        val latitude = sample.latitudeDeg ?: return@mapIndexedNotNull null
+        val longitude = sample.longitudeDeg ?: return@mapIndexedNotNull null
+        IndexedValue(index, GeoSample(latitude, longitude))
+    }
+
+    LaunchedEffect(playing, record.startedAtEpochMs) {
+        while (playing && replayIndex < samples.lastIndex) {
+            val currentTime = samples[replayIndex].timestampEpochMs
+            val nextTime = samples[replayIndex + 1].timestampEpochMs
+            delay((nextTime - currentTime).coerceIn(100L, 2_000L))
+            replayIndex++
+        }
+        if (replayIndex >= samples.lastIndex) playing = false
+    }
+
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.weight(.62f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxSize()) {
@@ -123,20 +146,35 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
                     val grid = Color.White.copy(alpha = .055f)
                     repeat(11) { i -> drawLine(grid, Offset(size.width*i/10f,0f), Offset(size.width*i/10f,size.height),1f) }
                     repeat(7) { i -> drawLine(grid, Offset(0f,size.height*i/6f), Offset(size.width,size.height*i/6f),1f) }
-                    val points = listOf(
-                        Offset(size.width*.10f,size.height*.72f), Offset(size.width*.22f,size.height*.59f),
-                        Offset(size.width*.36f,size.height*.48f), Offset(size.width*.51f,size.height*.34f),
-                        Offset(size.width*.67f,size.height*.39f), Offset(size.width*.80f,size.height*.27f),
-                        Offset(size.width*.91f,size.height*.46f)
-                    )
+                    val points = projectFlight(positionedSamples.map { it.value }, size.width, size.height)
                     points.zipWithNext().forEach { (a,b) -> drawLine(GsColors.Orange,a,b,4f) }
-                    points.forEach { drawCircle(GsColors.Orange,7f,it) }
+                    val currentPositionIndex = positionedSamples.indexOfLast { it.index <= replayIndex }
+                    if (currentPositionIndex >= 0) drawCircle(GsColors.Red, 12f, points[currentPositionIndex])
                 }
-                Text("TELEMETRY PATH PREVIEW", Modifier.align(Alignment.TopStart).padding(16.dp), color = GsColors.Muted, fontSize = 10.sp)
+                Text("RECORDED TELEMETRY PATH · ${samples.size} SAMPLES", Modifier.align(Alignment.TopStart).padding(16.dp), color = GsColors.Muted, fontSize = 10.sp)
+                if (positionedSamples.isEmpty()) {
+                    Text(
+                        if (samples.isEmpty()) "This legacy summary has no replay samples" else "This flight contains no GPS position samples",
+                        Modifier.align(Alignment.Center),
+                        color = GsColors.Muted
+                    )
+                }
                 Row(Modifier.align(Alignment.BottomCenter).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { }) { Text("◀") }
-                    Button(onClick = { }) { Text("▶ REPLAY") }
-                    OutlinedButton(onClick = { }) { Text("▶▶") }
+                    OutlinedButton(
+                        onClick = { playing = false; replayIndex = (replayIndex - 1).coerceAtLeast(0) },
+                        enabled = replayIndex > 0
+                    ) { Text("◀") }
+                    Button(
+                        onClick = {
+                            if (replayIndex >= samples.lastIndex) replayIndex = 0
+                            playing = !playing
+                        },
+                        enabled = samples.size > 1
+                    ) { Text(if (playing) "Ⅱ PAUSE" else "▶ REPLAY") }
+                    OutlinedButton(
+                        onClick = { playing = false; replayIndex = (replayIndex + 1).coerceAtMost(samples.lastIndex) },
+                        enabled = replayIndex < samples.lastIndex
+                    ) { Text("▶") }
                 }
             }
         }
@@ -148,11 +186,16 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
                 GsSettingLine("Maximum speed", record.maximumSpeedMps?.let { "%.1f m/s".format(it) } ?: "—")
                 GsSettingLine("Battery start", record.batteryStartPercent?.let { "$it%" } ?: "—")
                 GsSettingLine("Battery end", record.batteryEndPercent?.let { "$it%" } ?: "—")
+                GsSettingLine("Replay samples", samples.size.toString())
             }
-            GsSectionCard("EVENTS") {
-                Text("Flight timeline/event capture is prepared for GPS, mode, battery, RTH and warning events as the decoder exposes them.", color = GsColors.Muted, fontSize = 11.sp)
+            GsSectionCard("REPLAY TELEMETRY") {
+                GsSettingLine("Elapsed", currentSample?.let { formatDuration(it.timestampEpochMs - record.startedAtEpochMs) } ?: "—")
+                GsSettingLine("Altitude", currentSample?.altitudeM?.let { "%.1f m".format(it) } ?: "—")
+                GsSettingLine("Ground speed", currentSample?.groundSpeedMps?.let { "%.1f m/s".format(it) } ?: "—")
+                GsSettingLine("Heading", currentSample?.headingDeg?.let { "%.0f°".format(it) } ?: "—")
+                GsSettingLine("Battery", currentSample?.batteryPercent?.let { "$it%" } ?: "—")
             }
-            OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) { Text("EXPORT FLIGHT") }
+            OutlinedButton(onClick = { }, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("EXPORT FLIGHT — NOT YET AVAILABLE") }
         }
     }
 }
@@ -197,7 +240,7 @@ private fun RecoveryDetail(state: XStarState, recoveryPoints: List<RecoveryPoint
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("NAVIGATE TO LAST POSITION") }
-            OutlinedButton(onClick = { }, enabled = recoveryPoints.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("EXPORT RECOVERY PATH") }
+            OutlinedButton(onClick = { }, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("EXPORT RECOVERY PATH — NOT YET AVAILABLE") }
         }
     }
 }
@@ -210,6 +253,23 @@ private fun projectRecovery(points: List<RecoveryPoint>, width: Float, height: F
     return points.map { p ->
         val x=((p.position.longitudeDeg-minLon)/lonSpan).toFloat(); val y=(1.0-(p.position.latitudeDeg-minLat)/latSpan).toFloat()
         Offset(45f+x*(width-90f),45f+y*(height-90f))
+    }
+}
+
+private data class GeoSample(val latitudeDeg: Double, val longitudeDeg: Double)
+
+private fun projectFlight(samples: List<GeoSample>, width: Float, height: Float): List<Offset> {
+    if (samples.isEmpty()) return emptyList()
+    val minLat = samples.minOf { it.latitudeDeg }
+    val maxLat = samples.maxOf { it.latitudeDeg }
+    val minLon = samples.minOf { it.longitudeDeg }
+    val maxLon = samples.maxOf { it.longitudeDeg }
+    val latSpan = (maxLat - minLat).takeIf { it > 1e-7 } ?: 1e-7
+    val lonSpan = (maxLon - minLon).takeIf { it > 1e-7 } ?: 1e-7
+    return samples.map { sample ->
+        val x = ((sample.longitudeDeg - minLon) / lonSpan).toFloat()
+        val y = (1.0 - (sample.latitudeDeg - minLat) / latSpan).toFloat()
+        Offset(45f + x * (width - 90f), 45f + y * (height - 90f))
     }
 }
 

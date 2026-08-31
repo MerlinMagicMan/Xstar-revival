@@ -30,7 +30,7 @@ import io.xstarrevival.app.gs.GsMissionV2Screen
 import io.xstarrevival.app.gs.GsNavigationRail
 import io.xstarrevival.app.gs.GsPage
 import io.xstarrevival.app.gs.GsPersistence
-import io.xstarrevival.app.gs.GsRecordsScreen
+import io.xstarrevival.app.gs.GsRecordsV2Screen
 import io.xstarrevival.app.gs.GsSessionTracker
 import io.xstarrevival.app.gs.GsSettingsV2Screen
 import io.xstarrevival.app.gs.GsTheme
@@ -114,7 +114,7 @@ private fun GroundStationV2App(
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionV2Screen(state)
-                GsPage.RECORDS -> GsRecordsScreen(state, recoveryPoints, flightSummaries)
+                GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
                 GsPage.AIRCRAFT -> GsAircraftScreen(state)
                 GsPage.SETTINGS -> GsSettingsV2Screen()

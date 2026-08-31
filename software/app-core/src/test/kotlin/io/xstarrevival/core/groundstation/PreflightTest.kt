@@ -42,4 +42,18 @@ class PreflightTest {
         assertFalse(report.readyToFly)
         assertTrue(report.checks.any { it.id == "battery" && it.level == PreflightLevel.BLOCKER })
     }
+
+    @Test
+    fun missingRequiredTelemetryNeverReportsReady() {
+        val state = XStarState(
+            connection = ConnectionState.Connected("test", "X-Star Premium")
+        )
+
+        val report = PreflightEvaluator.evaluate(state)
+
+        assertFalse(report.readyToFly)
+        assertTrue(report.checks.any { it.id == "battery" && it.level == PreflightLevel.UNAVAILABLE })
+        assertTrue(report.checks.any { it.id == "gps" && it.level == PreflightLevel.UNAVAILABLE })
+        assertTrue(report.checks.any { it.id == "rc" && it.level == PreflightLevel.UNAVAILABLE })
+    }
 }
