@@ -18,10 +18,14 @@ import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartFollowCommand
+import io.xstarrevival.core.command.StartCourseLockCommand
+import io.xstarrevival.core.command.StartHomeLockCommand
 import io.xstarrevival.core.command.StartOrbitCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.StopFollowCommand
+import io.xstarrevival.core.command.StopCourseLockCommand
+import io.xstarrevival.core.command.StopHomeLockCommand
 import io.xstarrevival.core.command.StopOrbitCommand
 import io.xstarrevival.core.command.TakePhotoCommand
 import io.xstarrevival.core.command.TakeoffCommand
@@ -57,7 +61,11 @@ class SimulatorCommandAdapter(
         CommandKind.START_ORBIT,
         CommandKind.STOP_ORBIT,
         CommandKind.START_FOLLOW,
-        CommandKind.STOP_FOLLOW
+        CommandKind.STOP_FOLLOW,
+        CommandKind.START_COURSE_LOCK,
+        CommandKind.STOP_COURSE_LOCK,
+        CommandKind.START_HOME_LOCK,
+        CommandKind.STOP_HOME_LOCK
     )
 
     override suspend fun send(request: CommandRequest): CommandAcknowledgement {
@@ -115,6 +123,18 @@ class SimulatorCommandAdapter(
             StopFollowCommand -> if (!platform.stopFollow()) {
                 return CommandAcknowledgement.Rejected("Follow is not active")
             }
+            is StartCourseLockCommand -> if (!platform.startCourseLock(command.headingDeg)) {
+                return CommandAcknowledgement.Rejected("Simulator could not start Course Lock")
+            }
+            StopCourseLockCommand -> if (!platform.stopCourseLock()) {
+                return CommandAcknowledgement.Rejected("Course Lock is not active")
+            }
+            StartHomeLockCommand -> if (!platform.startHomeLock()) {
+                return CommandAcknowledgement.Rejected("Simulator could not start Home Lock")
+            }
+            StopHomeLockCommand -> if (!platform.stopHomeLock()) {
+                return CommandAcknowledgement.Rejected("Home Lock is not active")
+            }
             else -> return CommandAcknowledgement.Unsupported("${command.kind} is not implemented by the simulator")
         }
         return CommandAcknowledgement.Accepted("Simulator accepted ${request.command.kind}")
@@ -146,6 +166,10 @@ class SimulatorCommandAdapter(
             StopOrbitCommand -> awaitSmartCancellation(SmartFlightMode.ORBIT)
             is StartFollowCommand -> awaitSmartTerminal(SmartFlightMode.FOLLOW)
             StopFollowCommand -> awaitSmartCancellation(SmartFlightMode.FOLLOW)
+            is StartCourseLockCommand -> awaitSmartTerminal(SmartFlightMode.COURSE_LOCK)
+            StopCourseLockCommand -> awaitSmartCancellation(SmartFlightMode.COURSE_LOCK)
+            StartHomeLockCommand -> awaitSmartTerminal(SmartFlightMode.HOME_LOCK)
+            StopHomeLockCommand -> awaitSmartCancellation(SmartFlightMode.HOME_LOCK)
             else -> CommandCompletion.Failed("${command.kind} has no simulator completion rule")
         }
     }

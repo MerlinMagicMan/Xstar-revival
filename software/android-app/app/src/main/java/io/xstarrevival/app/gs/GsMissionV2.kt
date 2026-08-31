@@ -72,13 +72,17 @@ fun GsMissionV2Screen(
     onStartOrbit: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
     onStopOrbit: () -> Unit,
     onStartFollow: (Double, Double, Double) -> Unit,
-    onStopFollow: () -> Unit
+    onStopFollow: () -> Unit,
+    onStartCourseLock: (Double) -> Unit,
+    onStopCourseLock: () -> Unit,
+    onStartHomeLock: () -> Unit,
+    onStopHomeLock: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember(context) { GsMissionStore(context.applicationContext) }
     var plans by remember { mutableStateOf(store.load()) }
     var active by remember { mutableStateOf(plans.firstOrNull()) }
-    var mode by remember { mutableStateOf(GsMissionMode.WAYPOINTS) }
+    var mode by remember { mutableStateOf(GsMissionV2Mode.WAYPOINTS) }
 
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -87,7 +91,7 @@ fun GsMissionV2Screen(
                 Text("Offline planning · Configure → Review → Execute", color = GsColors.Muted)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GsMissionMode.entries.forEach { option ->
+                GsMissionV2Mode.entries.forEach { option ->
                     if (mode == option) Button(onClick = { mode = option }) { Text(option.name) }
                     else OutlinedButton(onClick = { mode = option }) { Text(option.name) }
                 }
@@ -95,7 +99,7 @@ fun GsMissionV2Screen(
         }
         Spacer(Modifier.height(16.dp))
         when (mode) {
-            GsMissionMode.WAYPOINTS -> PersistentWaypointPlanner(
+            GsMissionV2Mode.WAYPOINTS -> PersistentWaypointPlanner(
                 state = state,
                 plans = plans,
                 active = active,
@@ -115,15 +119,23 @@ fun GsMissionV2Screen(
                 onAbort = onAbort,
                 modifier = Modifier.weight(1f)
             )
-            GsMissionMode.ORBIT -> OrbitEditor(
+            GsMissionV2Mode.ORBIT -> OrbitEditor(
                 state, source, smartFlight, onStartOrbit, onStopOrbit, Modifier.weight(1f)
             )
-            GsMissionMode.FOLLOW -> FollowEditor(
+            GsMissionV2Mode.FOLLOW -> FollowEditor(
                 state, source, smartFlight, onStartFollow, onStopFollow, Modifier.weight(1f)
+            )
+            GsMissionV2Mode.COURSE_LOCK -> CourseLockEditor(
+                state, source, smartFlight, onStartCourseLock, onStopCourseLock, Modifier.weight(1f)
+            )
+            GsMissionV2Mode.HOME_LOCK -> HomeLockEditor(
+                state, source, smartFlight, onStartHomeLock, onStopHomeLock, Modifier.weight(1f)
             )
         }
     }
 }
+
+private enum class GsMissionV2Mode { WAYPOINTS, ORBIT, FOLLOW, COURSE_LOCK, HOME_LOCK }
 
 @Composable
 private fun PersistentWaypointPlanner(
@@ -523,11 +535,156 @@ private fun FollowEditor(
 }
 
 @Composable
+private fun CourseLockEditor(
+    state: XStarState,
+    source: TelemetrySource,
+    execution: SmartFlightExecutionState,
+    onStart: (Double) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var heading by remember { mutableFloatStateOf((state.attitude.yawDeg ?: 0.0).toFloat()) }
+    var reviewOpen by remember { mutableStateOf(false) }
+    val active = execution.mode == SmartFlightMode.COURSE_LOCK && execution.phase == SmartFlightPhase.ACTIVE
+    val airborne = state.aircraft.armed == true && (state.navigation.altitudeM ?: 0.0) > .2
+    val canStart = source == TelemetrySource.SIMULATOR && airborne && execution.phase != SmartFlightPhase.ACTIVE
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        GsSectionCard("COURSE LOCK", Modifier.width(360.dp).fillMaxHeight()) {
+            Text(
+                "Locks pitch/roll translation to a compass course while yaw remains independent.",
+                color = GsColors.Muted,
+                fontSize = 11.sp
+            )
+            MissionSlider("Locked heading", heading, 0f..359f, "°") { heading = it }
+            GsSettingLine("Yaw control", "Independent")
+            GsSettingLine("Throttle / gimbal", "Manual")
+            if (active) {
+                SmartFlightExecutionPanel(execution)
+                OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("STOP COURSE LOCK") }
+            } else {
+                Button(onClick = { reviewOpen = true }, enabled = canStart, modifier = Modifier.fillMaxWidth()) {
+                    Text("REVIEW COURSE LOCK")
+                }
+            }
+            if (source != TelemetrySource.SIMULATOR) {
+                Text("Course Lock execution is simulator-only.", color = GsColors.Muted, fontSize = 9.sp)
+            }
+        }
+        Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
+            Box(Modifier.fillMaxSize()) {
+                Text(
+                    "LOCKED COURSE ${heading.toInt()}°\nAircraft yaw does not rotate the translation frame",
+                    Modifier.align(Alignment.Center),
+                    color = GsColors.Muted
+                )
+            }
+        }
+    }
+    if (reviewOpen) {
+        AlertDialog(
+            onDismissRequest = { reviewOpen = false },
+            title = { Text("REVIEW COURSE LOCK") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GsSettingLine("Locked course", "${heading.toInt()}°")
+                    GsSettingLine("Pitch / roll", "Course-relative")
+                    GsSettingLine("Yaw / throttle / gimbal", "Manual")
+                }
+            },
+            dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = {
+                    onStart(heading.toDouble())
+                    reviewOpen = false
+                }) { Text("START COURSE LOCK") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun HomeLockEditor(
+    state: XStarState,
+    source: TelemetrySource,
+    execution: SmartFlightExecutionState,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var reviewOpen by remember { mutableStateOf(false) }
+    val active = execution.mode == SmartFlightMode.HOME_LOCK && execution.phase == SmartFlightPhase.ACTIVE
+    val airborne = state.aircraft.armed == true && (state.navigation.altitudeM ?: 0.0) > .2
+    val homeAvailable = state.navigation.homeLatitudeDeg != null && state.navigation.homeLongitudeDeg != null
+    val canStart = source == TelemetrySource.SIMULATOR && airborne && homeAvailable && execution.phase != SmartFlightPhase.ACTIVE
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        GsSectionCard("HOME LOCK", Modifier.width(360.dp).fillMaxHeight()) {
+            Text(
+                "Pitch commands movement away from or toward Home; roll commands tangential movement around Home.",
+                color = GsColors.Muted,
+                fontSize = 11.sp
+            )
+            GsSettingLine("Home Point", if (homeAvailable) "Available" else "Unavailable")
+            GsSettingLine("Pitch forward / back", "Away / toward Home")
+            GsSettingLine("Roll", "Clockwise / counter-clockwise")
+            GsSettingLine("Yaw / throttle / gimbal", "Manual")
+            if (active) {
+                SmartFlightExecutionPanel(execution)
+                OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("STOP HOME LOCK") }
+            } else {
+                Button(onClick = { reviewOpen = true }, enabled = canStart, modifier = Modifier.fillMaxWidth()) {
+                    Text("REVIEW HOME LOCK")
+                }
+            }
+            if (source != TelemetrySource.SIMULATOR) {
+                Text("Home Lock execution is simulator-only.", color = GsColors.Muted, fontSize = 9.sp)
+            }
+        }
+        Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
+            Box(Modifier.fillMaxSize()) {
+                Text(
+                    "HOME-RELATIVE CONTROL FRAME\nTranslation remains anchored to the confirmed Home Point",
+                    Modifier.align(Alignment.Center),
+                    color = GsColors.Muted
+                )
+            }
+        }
+    }
+    if (reviewOpen) {
+        AlertDialog(
+            onDismissRequest = { reviewOpen = false },
+            title = { Text("REVIEW HOME LOCK") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GsSettingLine(
+                        "Home Point",
+                        state.navigation.homeLatitudeDeg?.let { latitude ->
+                            state.navigation.homeLongitudeDeg?.let { longitude -> "%.5f, %.5f".format(latitude, longitude) }
+                        } ?: "Unavailable"
+                    )
+                    GsSettingLine("Pitch", "Away from / toward Home")
+                    GsSettingLine("Roll", "Tangential around Home")
+                    GsSettingLine("Yaw / throttle / gimbal", "Manual")
+                }
+            },
+            dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = {
+                    onStart()
+                    reviewOpen = false
+                }) { Text("START HOME LOCK") }
+            }
+        )
+    }
+}
+
+@Composable
 private fun SmartFlightExecutionPanel(state: SmartFlightExecutionState) {
     Text("${state.mode.name.replace('_', ' ')} · ${state.phase}", color = GsColors.Orange, fontWeight = FontWeight.Bold)
     state.progress?.let { GsSettingLine("Progress", "${(it * 100).toInt()}%") }
     if (state.targetLaps != null) GsSettingLine("Laps", "${state.completedLaps ?: 0} / ${state.targetLaps}")
-    state.distanceToTargetM?.let { GsSettingLine("Target distance", "%.1f m".format(it)) }
+    state.distanceToTargetM?.let {
+        GsSettingLine(if (state.mode == SmartFlightMode.HOME_LOCK) "Home distance" else "Target distance", "%.1f m".format(it))
+    }
     state.detail?.let { Text(it, color = GsColors.Muted, fontSize = 9.sp) }
 }
 

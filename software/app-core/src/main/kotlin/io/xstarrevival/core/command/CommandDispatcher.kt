@@ -137,7 +137,7 @@ class CommandDispatcher(
             CommandKind.TAKEOFF, CommandKind.LAND, CommandKind.EMERGENCY_LAND -> 30_000L
             CommandKind.RETURN_TO_HOME -> 5 * 60_000L
             CommandKind.START_ORBIT -> 10 * 60_000L
-            CommandKind.START_FOLLOW -> 30 * 60_000L
+            CommandKind.START_FOLLOW, CommandKind.START_COURSE_LOCK, CommandKind.START_HOME_LOCK -> 30 * 60_000L
             CommandKind.START_WAYPOINT_MISSION -> 30 * 60_000L
             CommandKind.CALIBRATE_GIMBAL -> 60_000L
             else -> 5_000L

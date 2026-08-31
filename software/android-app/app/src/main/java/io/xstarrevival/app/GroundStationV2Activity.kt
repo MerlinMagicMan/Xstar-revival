@@ -43,6 +43,7 @@ import io.xstarrevival.core.groundstation.SmartFlightExecutionState
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.sim.SimulatorScenario
+import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 
@@ -64,11 +65,14 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
-                    vm::setSimulatorScenario, vm::startSimulatorMission, vm::pauseSimulatorMission,
+                    vm::setSimulatorScenario, vm::setSimulatorControls,
+                    vm::startSimulatorMission, vm::pauseSimulatorMission,
                     vm::resumeSimulatorMission, vm::abortSimulatorMission,
                     vm::startSimulatorRth, vm::cancelSimulatorRth,
                     vm::startSimulatorOrbit, vm::stopSimulatorOrbit,
-                    vm::startSimulatorFollow, vm::stopSimulatorFollow
+                    vm::startSimulatorFollow, vm::stopSimulatorFollow,
+                    vm::startSimulatorCourseLock, vm::stopSimulatorCourseLock,
+                    vm::startSimulatorHomeLock, vm::stopSimulatorHomeLock
                 )
             }
         }
@@ -95,6 +99,7 @@ private fun GroundStationV2App(
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
+    onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartMission: (MissionPlan) -> Unit,
     onPauseMission: () -> Unit,
     onResumeMission: () -> Unit,
@@ -104,7 +109,11 @@ private fun GroundStationV2App(
     onStartOrbit: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
     onStopOrbit: () -> Unit,
     onStartFollow: (Double, Double, Double) -> Unit,
-    onStopFollow: () -> Unit
+    onStopFollow: () -> Unit,
+    onStartCourseLock: (Double) -> Unit,
+    onStopCourseLock: () -> Unit,
+    onStartHomeLock: () -> Unit,
+    onStopHomeLock: () -> Unit
 ) {
     var page by rememberSaveable { mutableStateOf(GsPage.GARAGE) }
     val context = LocalContext.current
@@ -142,7 +151,7 @@ private fun GroundStationV2App(
                 GsPage.COCKPIT -> GsCockpitScreen(
                     state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
-                    onSimulatorScenario, onStartRth, onCancelRth,
+                    onSimulatorScenario, onSimulatorControls, onStartRth, onCancelRth,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionV2Screen(
@@ -158,7 +167,11 @@ private fun GroundStationV2App(
                     onStartOrbit = onStartOrbit,
                     onStopOrbit = onStopOrbit,
                     onStartFollow = onStartFollow,
-                    onStopFollow = onStopFollow
+                    onStopFollow = onStopFollow,
+                    onStartCourseLock = onStartCourseLock,
+                    onStopCourseLock = onStopCourseLock,
+                    onStartHomeLock = onStartHomeLock,
+                    onStopHomeLock = onStopHomeLock
                 )
                 GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)

@@ -57,6 +57,22 @@ data class SimulatorFollowRuntime(
     override val mode = SmartFlightMode.FOLLOW
 }
 
+data class SimulatorCourseLockRuntime(
+    val headingDeg: Double,
+    override val phase: SmartFlightPhase = SmartFlightPhase.ACTIVE,
+    override val detail: String = "Course-relative controls active"
+) : SimulatorSmartFlightRuntime {
+    override val mode = SmartFlightMode.COURSE_LOCK
+}
+
+data class SimulatorHomeLockRuntime(
+    val referenceHeadingDeg: Double,
+    override val phase: SmartFlightPhase = SmartFlightPhase.ACTIVE,
+    override val detail: String = "Home-relative controls active"
+) : SimulatorSmartFlightRuntime {
+    override val mode = SmartFlightMode.HOME_LOCK
+}
+
 data class SimulatorSmartFlightStep(
     val snapshot: SimulatorSnapshot,
     val runtime: SimulatorSmartFlightRuntime
@@ -92,16 +108,24 @@ object SimulatorSmartFlightModel {
     fun startFollow(distanceM: Double, altitudeM: Double, speedMps: Double, target: GeoPoint?) =
         SimulatorFollowRuntime(distanceM, altitudeM, speedMps, target ?: GeoPoint(HOME_LATITUDE, HOME_LONGITUDE))
 
+    fun startCourseLock(headingDeg: Double) = SimulatorCourseLockRuntime(normalizeHeading(headingDeg))
+
+    fun startHomeLock(snapshot: SimulatorSnapshot) = SimulatorHomeLockRuntime(snapshot.yawDeg)
+
     fun cancel(runtime: SimulatorSmartFlightRuntime, detail: String): SimulatorSmartFlightRuntime = when (runtime) {
         is SimulatorRthRuntime -> runtime.copy(phase = SmartFlightPhase.CANCELLED, detail = detail)
         is SimulatorOrbitRuntime -> runtime.copy(phase = SmartFlightPhase.CANCELLED, detail = detail)
         is SimulatorFollowRuntime -> runtime.copy(phase = SmartFlightPhase.CANCELLED, detail = detail)
+        is SimulatorCourseLockRuntime -> runtime.copy(phase = SmartFlightPhase.CANCELLED, detail = detail)
+        is SimulatorHomeLockRuntime -> runtime.copy(phase = SmartFlightPhase.CANCELLED, detail = detail)
     }
 
     fun fail(runtime: SimulatorSmartFlightRuntime, detail: String): SimulatorSmartFlightRuntime = when (runtime) {
         is SimulatorRthRuntime -> runtime.copy(phase = SmartFlightPhase.FAILED, detail = detail)
         is SimulatorOrbitRuntime -> runtime.copy(phase = SmartFlightPhase.FAILED, detail = detail)
         is SimulatorFollowRuntime -> runtime.copy(phase = SmartFlightPhase.FAILED, detail = detail)
+        is SimulatorCourseLockRuntime -> runtime.copy(phase = SmartFlightPhase.FAILED, detail = detail)
+        is SimulatorHomeLockRuntime -> runtime.copy(phase = SmartFlightPhase.FAILED, detail = detail)
     }
 
     fun step(snapshot: SimulatorSnapshot, runtime: SimulatorSmartFlightRuntime, dt: Double): SimulatorSmartFlightStep {
@@ -119,7 +143,33 @@ object SimulatorSmartFlightModel {
             is SimulatorRthRuntime -> stepRth(snapshot, runtime, dt)
             is SimulatorOrbitRuntime -> stepOrbit(snapshot, runtime, dt)
             is SimulatorFollowRuntime -> stepFollow(snapshot, runtime, dt)
+            is SimulatorCourseLockRuntime,
+            is SimulatorHomeLockRuntime -> SimulatorSmartFlightStep(snapshot, runtime)
         }
+    }
+
+    fun transformControls(
+        snapshot: SimulatorSnapshot,
+        runtime: SimulatorSmartFlightRuntime?,
+        input: SimulatorControlInput
+    ): SimulatorControlInput {
+        if (runtime?.phase != SmartFlightPhase.ACTIVE) return input
+        val referenceHeading = when (runtime) {
+            is SimulatorCourseLockRuntime -> runtime.headingDeg
+            is SimulatorHomeLockRuntime -> {
+                if (hypot(snapshot.northM, snapshot.eastM) > 1.0) {
+                    normalizeHeading(Math.toDegrees(atan2(snapshot.eastM, snapshot.northM)))
+                } else {
+                    runtime.referenceHeadingDeg
+                }
+            }
+            else -> return input
+        }
+        val relativeHeading = Math.toRadians(referenceHeading - snapshot.yawDeg)
+        return input.copy(
+            pitch = input.pitch * cos(relativeHeading) - input.roll * sin(relativeHeading),
+            roll = input.pitch * sin(relativeHeading) + input.roll * cos(relativeHeading)
+        ).bounded()
     }
 
     fun state(snapshot: SimulatorSnapshot, runtime: SimulatorSmartFlightRuntime?): SmartFlightExecutionState {
@@ -155,6 +205,25 @@ object SimulatorSmartFlightModel {
                 phase = runtime.phase,
                 distanceToTargetM = hypot(snapshot.northM - north(runtime.target), snapshot.eastM - east(runtime.target)),
                 detail = runtime.detail
+            )
+            is SimulatorCourseLockRuntime -> SmartFlightExecutionState(
+                mode = runtime.mode,
+                phase = runtime.phase,
+                detail = if (runtime.phase == SmartFlightPhase.ACTIVE) {
+                    "Course locked to ${runtime.headingDeg.toInt()}° · yaw remains independent"
+                } else {
+                    runtime.detail
+                }
+            )
+            is SimulatorHomeLockRuntime -> SmartFlightExecutionState(
+                mode = runtime.mode,
+                phase = runtime.phase,
+                distanceToTargetM = hypot(snapshot.northM, snapshot.eastM),
+                detail = if (runtime.phase == SmartFlightPhase.ACTIVE) {
+                    "Pitch controls away/toward Home · roll controls orbit direction"
+                } else {
+                    runtime.detail
+                }
             )
         }
     }

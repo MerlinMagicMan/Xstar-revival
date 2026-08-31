@@ -164,6 +164,33 @@ class CommandSafetyValidatorTest {
         assertTrue(follow.issues.any { it.message.contains("speed") })
     }
 
+    @Test
+    fun `ioc lock modes require valid navigation state`() {
+        val airborne = healthyState().copy(
+            aircraft = AircraftState(armed = true, flightMode = "FLYING"),
+            navigation = healthyState().navigation.copy(
+                altitudeM = 20.0,
+                homeLatitudeDeg = null,
+                homeLongitudeDeg = null
+            )
+        )
+        val course = validator.validate(
+            StartCourseLockCommand(-1.0),
+            airborne,
+            setOf(CommandKind.START_COURSE_LOCK)
+        )
+        val home = validator.validate(
+            StartHomeLockCommand,
+            airborne,
+            setOf(CommandKind.START_HOME_LOCK)
+        )
+
+        assertFalse(course.canDispatch)
+        assertTrue(course.issues.any { it.message.contains("heading") })
+        assertFalse(home.canDispatch)
+        assertTrue(home.issues.any { it.message.contains("Home Point") })
+    }
+
     private fun healthyState() = XStarState(
         connection = ConnectionState.Connected("test", "X-Star Premium"),
         aircraft = AircraftState(armed = false, flightMode = "GROUNDED"),

@@ -212,6 +212,8 @@ class CommandSafetyValidator {
             CommandKind.START_WAYPOINT_MISSION,
             CommandKind.START_ORBIT,
             CommandKind.START_FOLLOW,
+            CommandKind.START_COURSE_LOCK,
+            CommandKind.START_HOME_LOCK,
             CommandKind.GO_TO_WAYPOINT
         )
         val SAFETY_CRITICAL_COMMANDS = setOf(
@@ -221,6 +223,8 @@ class CommandSafetyValidator {
             CommandKind.START_WAYPOINT_MISSION,
             CommandKind.START_ORBIT,
             CommandKind.START_FOLLOW,
+            CommandKind.START_COURSE_LOCK,
+            CommandKind.START_HOME_LOCK,
             CommandKind.GO_TO_WAYPOINT
         )
     }

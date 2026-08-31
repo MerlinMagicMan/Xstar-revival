@@ -71,7 +71,7 @@ data class MissionExecutionState(
     val detail: String? = null
 )
 
-enum class SmartFlightMode { NONE, RETURN_TO_HOME, ORBIT, FOLLOW }
+enum class SmartFlightMode { NONE, RETURN_TO_HOME, ORBIT, FOLLOW, COURSE_LOCK, HOME_LOCK }
 enum class SmartFlightPhase { IDLE, ACTIVE, COMPLETED, CANCELLED, FAILED }
 
 data class SmartFlightExecutionState(

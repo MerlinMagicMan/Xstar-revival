@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 /**
  * Software-only platform. Control methods mutate this local model and are never connected to a live adapter.
@@ -62,10 +63,18 @@ class SimulatorXStarPlatform(
                 val missionControlsLocked = missionRuntime?.phase in setOf(
                     MissionExecutionPhase.ACTIVE,
                     MissionExecutionPhase.PAUSED
-                ) || smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE
+                )
+                val autonomousControlsLocked = smartFlightRuntime?.let {
+                    it.phase == SmartFlightPhase.ACTIVE && it.mode in AUTONOMOUS_SMART_FLIGHT_MODES
+                } == true
+                val effectiveInput = if (missionControlsLocked || autonomousControlsLocked) {
+                    SimulatorControlInput()
+                } else {
+                    SimulatorSmartFlightModel.transformControls(snapshot, smartFlightRuntime, input)
+                }
                 snapshot = SimulatorFlightModel.step(
                     snapshot,
-                    if (missionControlsLocked) SimulatorControlInput() else input,
+                    effectiveInput,
                     tickMs / 1000.0
                 )
                 missionRuntime?.let { runtime ->
@@ -189,8 +198,12 @@ class SimulatorXStarPlatform(
         return true
     }
 
-    fun startReturnToHome(): Boolean {
-        if (smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE) return false
+    suspend fun startReturnToHome(): Boolean {
+        smartFlightRuntime?.takeIf { it.phase == SmartFlightPhase.ACTIVE }?.let { active ->
+            smartFlightRuntime = SimulatorSmartFlightModel.cancel(active, "Interrupted by Return-to-Home")
+            publish()
+            yield()
+        }
         val runtime = missionRuntime
         if (runtime != null && runtime.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) {
             missionRuntime = SimulatorMissionModel.abort(runtime, "Mission interrupted by Return-to-Home")
@@ -231,6 +244,24 @@ class SimulatorXStarPlatform(
     }
 
     fun stopFollow(): Boolean = cancelSmartFlight(SmartFlightMode.FOLLOW, "Follow stopped")
+
+    fun startCourseLock(headingDeg: Double): Boolean {
+        if (!canStartSmartFlight()) return false
+        smartFlightRuntime = SimulatorSmartFlightModel.startCourseLock(headingDeg)
+        publish()
+        return true
+    }
+
+    fun stopCourseLock(): Boolean = cancelSmartFlight(SmartFlightMode.COURSE_LOCK, "Course Lock stopped")
+
+    fun startHomeLock(): Boolean {
+        if (!canStartSmartFlight()) return false
+        smartFlightRuntime = SimulatorSmartFlightModel.startHomeLock(snapshot)
+        publish()
+        return true
+    }
+
+    fun stopHomeLock(): Boolean = cancelSmartFlight(SmartFlightMode.HOME_LOCK, "Home Lock stopped")
 
     private fun canStartSmartFlight(): Boolean =
         smartFlightRuntime?.phase != SmartFlightPhase.ACTIVE &&
@@ -275,7 +306,7 @@ class SimulatorXStarPlatform(
                 SimulatorSmartFlightModel.fail(it, "${value.label} interrupted smart flight")
             }
             SimulatorScenario.HOME_UNAVAILABLE -> smartFlightRuntime?.let {
-                if (it.mode == SmartFlightMode.RETURN_TO_HOME) {
+                if (it.mode in setOf(SmartFlightMode.RETURN_TO_HOME, SmartFlightMode.HOME_LOCK)) {
                     SimulatorSmartFlightModel.fail(it, "Home Point became unavailable")
                 } else it
             }
@@ -309,6 +340,8 @@ class SimulatorXStarPlatform(
                 SmartFlightMode.RETURN_TO_HOME -> "RETURN TO HOME"
                 SmartFlightMode.ORBIT -> "ORBIT"
                 SmartFlightMode.FOLLOW -> "FOLLOW"
+                SmartFlightMode.COURSE_LOCK -> "COURSE LOCK"
+                SmartFlightMode.HOME_LOCK -> "HOME LOCK"
                 else -> null
             }
             else -> when (missionPhase) {
@@ -321,6 +354,11 @@ class SimulatorXStarPlatform(
     }
 
     private companion object {
+        val AUTONOMOUS_SMART_FLIGHT_MODES = setOf(
+            SmartFlightMode.RETURN_TO_HOME,
+            SmartFlightMode.ORBIT,
+            SmartFlightMode.FOLLOW
+        )
         val LINK_LOSS_SCENARIOS = setOf(
             SimulatorScenario.COMPLETE_LINK_LOSS,
             SimulatorScenario.CONNECTION_LOSS_DURING_MISSION

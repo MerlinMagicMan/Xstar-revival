@@ -51,6 +51,12 @@ active-state Stop controls. Orbit reviews radius, altitude, speed, direction, la
 reviews the simulated operator target, offset, altitude, speed, and target-loss behavior. No live
 smart-flight command transport is enabled.
 
+The Smart Flight selector also includes simulator-only Course Lock and Home Lock configure/review
+flows with persistent active-state feedback and explicit Stop actions. The V2 cockpit exposes the
+isolated virtual controller so these interactive modes can be exercised: Course Lock keeps
+translation on the reviewed compass course, while Home Lock makes pitch radial and roll tangential
+to the confirmed Home Point. Live and replay sources remain receive-only.
+
 ## Build
 
 From this directory:
