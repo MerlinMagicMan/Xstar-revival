@@ -87,6 +87,15 @@ failure.
 battery use, projected reserve, and unsupported actions before execution. Simulator missions are
 limited to its 120 m model ceiling and explicitly reject unsupported waypoint actions.
 
+## Simulator smart flight
+
+The simulator command adapter implements reconciled Return-to-Home, Orbit, and Follow modes. RTH
+climbs to a safe simulated return altitude, travels to Home, and lands. Orbit applies POI, radius,
+altitude, speed, direction, and lap count while publishing lap progress. Follow maintains a
+configured distance and altitude from a bounded simulated operator target until stopped. Manual
+stick movement is locked while an autonomous mode is active, and GPS, compass, link-loss, and
+forced-landing scenarios produce explicit failed or cancelled terminal states.
+
 ## Official SDK read-only bridge
 
 `AutelSdkBridge` is a proprietary-type-free boundary for an optional Android binding around Autel's legacy AAR. Its public surface contains only initialization, discovery, disconnection, passive refresh, typed observation callbacks, and receive-only H.264 frames.

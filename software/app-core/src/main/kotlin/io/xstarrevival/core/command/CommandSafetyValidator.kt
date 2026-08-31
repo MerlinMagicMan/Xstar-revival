@@ -36,7 +36,7 @@ class CommandSafetyValidator {
             issues += blocking("Aircraft is not connected")
         }
         if (
-            command.kind != CommandKind.EMERGENCY_LAND &&
+            command.kind !in setOf(CommandKind.EMERGENCY_LAND, CommandKind.RETURN_TO_HOME) &&
             command.kind in EXCLUSIVE_FLIGHT_COMMANDS &&
             activeCommands.any { it in EXCLUSIVE_FLIGHT_COMMANDS }
         ) {
@@ -87,12 +87,15 @@ class CommandSafetyValidator {
                 if (command.radiusM !in 5.0..500.0) issues += blocking("Orbit radius must be between 5 m and 500 m")
                 if (command.altitudeM !in 2.0..500.0) issues += blocking("Orbit altitude must be between 2 m and 500 m")
                 if (command.speedMps !in 0.5..15.0) issues += blocking("Orbit speed must be between 0.5 m/s and 15 m/s")
+                if (command.laps !in 1..20) issues += blocking("Orbit laps must be between 1 and 20")
             }
             StopOrbitCommand, StopFollowCommand, StopCourseLockCommand, StopHomeLockCommand -> requireAirborne(state, issues)
             is StartFollowCommand -> {
                 requireAirborne(state, issues)
                 if (command.distanceM !in 5.0..200.0) issues += blocking("Follow distance must be between 5 m and 200 m")
                 if (command.altitudeM !in 2.0..500.0) issues += blocking("Follow altitude must be between 2 m and 500 m")
+                if (command.speedMps !in 0.5..15.0) issues += blocking("Follow speed must be between 0.5 m/s and 15 m/s")
+                command.target?.let { validateCoordinates(it.latitudeDeg, it.longitudeDeg, issues) }
             }
             is StartCourseLockCommand -> {
                 requireAirborne(state, issues)

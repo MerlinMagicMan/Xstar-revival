@@ -54,10 +54,18 @@ import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.isTerminal
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.groundstation.SmartFlightExecutionState
+import io.xstarrevival.core.groundstation.SmartFlightMode
+import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 fun GsCockpitScreen(
@@ -66,12 +74,15 @@ fun GsCockpitScreen(
     heartbeat: HeartbeatUiState,
     commandStatus: CommandStatus?,
     simulatorScenario: SimulatorScenario,
+    smartFlight: SmartFlightExecutionState,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSimulatorArm: () -> Unit,
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
+    onStartRth: () -> Unit,
+    onCancelRth: () -> Unit,
     onGoMissions: () -> Unit,
     onGoAircraft: () -> Unit
 ) {
@@ -79,6 +90,8 @@ fun GsCockpitScreen(
     val commandBusy = source == TelemetrySource.SIMULATOR && commandStatus?.phase?.isTerminal == false
     val grounded = (state.navigation.altitudeM ?: 0.0) <= 0.2
     val airborne = state.aircraft.armed == true && !grounded
+    val rthActive = smartFlight.mode == SmartFlightMode.RETURN_TO_HOME && smartFlight.phase == SmartFlightPhase.ACTIVE
+    val homeAvailable = state.navigation.homeLatitudeDeg != null && state.navigation.homeLongitudeDeg != null
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         GsVideoSurface(state, source, liveVideoFrames, Modifier.fillMaxSize())
         GsTopTelemetry(state, source, heartbeat, Modifier.align(Alignment.TopCenter))
@@ -114,6 +127,13 @@ fun GsCockpitScreen(
             commandStatus?.let {
                 GsCommandStatusPill(it, Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 58.dp))
             }
+            if (smartFlight.phase != SmartFlightPhase.IDLE) {
+                GsSmartFlightStatusPill(
+                    smartFlight,
+                    state,
+                    Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 112.dp)
+                )
+            }
         }
         if (state.warnings.isNotEmpty()) {
             Card(
@@ -137,11 +157,15 @@ fun GsCockpitScreen(
     when (dialog) {
         CockpitDialog.Health -> GsHealthDialog(state, onGoAircraft, onDismiss = { dialog = null })
         CockpitDialog.Rth -> GsConfirmActionDialog(
-            title = "RETURN TO HOME",
-            body = "Aircraft will use its configured Return-to-Home behavior. Confirm the Home point and RTH altitude before execution.",
-            confirm = "START RTH",
+            title = if (rthActive) "CANCEL RETURN TO HOME" else "RETURN TO HOME",
+            body = rthDialogBody(state, source, rthActive),
+            confirm = if (rthActive) "CANCEL RTH" else "START RTH",
+            confirmEnabled = source == TelemetrySource.SIMULATOR && (rthActive || airborne && homeAvailable),
             onDismiss = { dialog = null },
-            onConfirm = { dialog = null }
+            onConfirm = {
+                if (rthActive) onCancelRth() else onStartRth()
+                dialog = null
+            }
         )
         CockpitDialog.SmartFlight -> GsSmartFlightDialog(onGoMissions, onDismiss = { dialog = null })
         CockpitDialog.Home -> GsHomeDialog(state, onDismiss = { dialog = null })
@@ -325,6 +349,96 @@ private fun GsCommandStatusPill(status: CommandStatus, modifier: Modifier = Modi
 }
 
 @Composable
+private fun GsSmartFlightStatusPill(
+    smartFlight: SmartFlightExecutionState,
+    aircraftState: XStarState,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = .84f))) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) {
+            Text(
+                "${smartFlight.mode.name.replace('_', ' ')} · ${smartFlight.phase}",
+                color = GsColors.Blue,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+            smartFlight.progress?.let { Text("Progress ${(it * 100).toInt()}%", color = GsColors.Muted, fontSize = 9.sp) }
+            if (smartFlight.mode == SmartFlightMode.RETURN_TO_HOME) {
+                val distance = smartFlight.distanceToTargetM ?: distanceToHomeMeters(aircraftState)
+                val altitude = aircraftState.navigation.altitudeM
+                val etaSeconds = rthEtaSeconds(distance, altitude)
+                Text(
+                    "Home ${formatMeters(distance)} · Alt ${formatMeters(altitude)} · ETA ${formatDuration(etaSeconds)}",
+                    color = GsColors.White,
+                    fontSize = 9.sp
+                )
+                Text("Battery ${aircraftState.battery.percent?.let { "$it%" } ?: "—"}", color = GsColors.Muted, fontSize = 9.sp)
+            }
+            smartFlight.detail?.let { Text(it, color = GsColors.Muted, fontSize = 9.sp) }
+        }
+    }
+}
+
+private fun rthDialogBody(state: XStarState, source: TelemetrySource, active: Boolean): String {
+    if (source != TelemetrySource.SIMULATOR) {
+        return "Live Return-to-Home transmission remains disabled until the aircraft command protocol is validated."
+    }
+    val altitude = state.navigation.altitudeM
+    val returnAltitude = max(20.0, altitude ?: 0.0)
+    val distance = distanceToHomeMeters(state)
+    val etaSeconds = rthEtaSeconds(distance, altitude)
+    val arrivalBattery = state.battery.percent?.let { current ->
+        etaSeconds?.let { (current - it * 0.025).roundToInt().coerceAtLeast(0) }
+    }
+    val homeConfidence = when {
+        state.navigation.homeLatitudeDeg == null || state.navigation.homeLongitudeDeg == null -> "Unavailable"
+        state.navigation.gpsFix == null -> "Coordinates set; GPS accuracy not reported"
+        else -> "${state.navigation.gpsFix} · ${state.navigation.satellites ?: 0} satellites; accuracy not reported"
+    }
+    val action = if (active) {
+        "Cancelling returns manual control and stops the automated return sequence."
+    } else {
+        "Simulator will climb to the RTH altitude, return to the confirmed Home Point, and land."
+    }
+    return buildString {
+        appendLine(action)
+        appendLine()
+        appendLine("Current altitude       ${formatMeters(altitude)}")
+        appendLine("RTH altitude           ${formatMeters(returnAltitude)}")
+        appendLine("Home distance          ${formatMeters(distance)}")
+        appendLine("Estimated arrival      ${arrivalBattery?.let { "$it% battery" } ?: "Unavailable"}")
+        append("Home-point confidence  $homeConfidence")
+    }
+}
+
+private fun distanceToHomeMeters(state: XStarState): Double? {
+    val latitude = state.navigation.latitudeDeg ?: return null
+    val longitude = state.navigation.longitudeDeg ?: return null
+    val homeLatitude = state.navigation.homeLatitudeDeg ?: return null
+    val homeLongitude = state.navigation.homeLongitudeDeg ?: return null
+    val latitude1 = Math.toRadians(latitude)
+    val latitude2 = Math.toRadians(homeLatitude)
+    val deltaLatitude = latitude2 - latitude1
+    val deltaLongitude = Math.toRadians(homeLongitude - longitude)
+    val haversine = sin(deltaLatitude / 2) * sin(deltaLatitude / 2) +
+        cos(latitude1) * cos(latitude2) * sin(deltaLongitude / 2) * sin(deltaLongitude / 2)
+    return 2.0 * 6_371_000.0 * asin(sqrt(haversine.coerceIn(0.0, 1.0)))
+}
+
+private fun rthEtaSeconds(distanceM: Double?, altitudeM: Double?): Int? {
+    if (distanceM == null || altitudeM == null) return null
+    val returnSeconds = distanceM / 8.0
+    val landingSeconds = altitudeM / 0.8
+    return (returnSeconds + landingSeconds).roundToInt().coerceAtLeast(0)
+}
+
+private fun formatMeters(value: Double?): String = value?.let { "${it.roundToInt()} m" } ?: "—"
+
+private fun formatDuration(seconds: Int?): String = seconds?.let {
+    "%02d:%02d".format(it / 60, it % 60)
+} ?: "—"
+
+@Composable
 private fun GsRailButton(glyph: String, label: String, onClick: () -> Unit, accent: Color = GsColors.White) {
     Column(
         Modifier.width(64.dp).background(Color.Black.copy(alpha = .64f), RoundedCornerShape(12.dp))
@@ -423,13 +537,20 @@ private fun GsHealthRow(name: String, good: Boolean, detail: String? = null) {
 }
 
 @Composable
-private fun GsConfirmActionDialog(title: String, body: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun GsConfirmActionDialog(
+    title: String,
+    body: String,
+    confirm: String,
+    confirmEnabled: Boolean = true,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(body) },
         dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
-        confirmButton = { Button(onClick = onConfirm) { Text(confirm) } }
+        confirmButton = { Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirm) } }
     )
 }
 

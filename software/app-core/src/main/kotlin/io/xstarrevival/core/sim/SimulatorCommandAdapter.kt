@@ -2,6 +2,7 @@ package io.xstarrevival.core.sim
 
 import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
+import io.xstarrevival.core.command.CancelReturnToHomeCommand
 import io.xstarrevival.core.command.CommandAcknowledgement
 import io.xstarrevival.core.command.CommandCompletion
 import io.xstarrevival.core.command.CommandKind
@@ -12,14 +13,21 @@ import io.xstarrevival.core.command.EmergencyLandCommand
 import io.xstarrevival.core.command.LandCommand
 import io.xstarrevival.core.command.PauseMissionCommand
 import io.xstarrevival.core.command.RecenterGimbalCommand
+import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
 import io.xstarrevival.core.command.StartRecordingCommand
+import io.xstarrevival.core.command.StartFollowCommand
+import io.xstarrevival.core.command.StartOrbitCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StopRecordingCommand
+import io.xstarrevival.core.command.StopFollowCommand
+import io.xstarrevival.core.command.StopOrbitCommand
 import io.xstarrevival.core.command.TakePhotoCommand
 import io.xstarrevival.core.command.TakeoffCommand
 import io.xstarrevival.core.groundstation.MissionExecutionPhase
+import io.xstarrevival.core.groundstation.SmartFlightMode
+import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import kotlinx.coroutines.flow.first
@@ -43,7 +51,13 @@ class SimulatorCommandAdapter(
         CommandKind.START_WAYPOINT_MISSION,
         CommandKind.PAUSE_MISSION,
         CommandKind.RESUME_MISSION,
-        CommandKind.ABORT_MISSION
+        CommandKind.ABORT_MISSION,
+        CommandKind.RETURN_TO_HOME,
+        CommandKind.CANCEL_RETURN_TO_HOME,
+        CommandKind.START_ORBIT,
+        CommandKind.STOP_ORBIT,
+        CommandKind.START_FOLLOW,
+        CommandKind.STOP_FOLLOW
     )
 
     override suspend fun send(request: CommandRequest): CommandAcknowledgement {
@@ -68,6 +82,38 @@ class SimulatorCommandAdapter(
             }
             AbortMissionCommand -> if (!platform.abortMission()) {
                 return CommandAcknowledgement.Rejected("No active simulator mission can be aborted")
+            }
+            ReturnToHomeCommand -> if (!platform.startReturnToHome()) {
+                return CommandAcknowledgement.Rejected("Simulator could not start Return-to-Home")
+            }
+            CancelReturnToHomeCommand -> if (!platform.cancelReturnToHome()) {
+                return CommandAcknowledgement.Rejected("Return-to-Home is not active")
+            }
+            is StartOrbitCommand -> if (!platform.startOrbit(
+                    command.pointOfInterest,
+                    command.radiusM,
+                    command.altitudeM,
+                    command.speedMps,
+                    command.clockwise,
+                    command.laps
+                )
+            ) {
+                return CommandAcknowledgement.Rejected("Simulator could not start Orbit")
+            }
+            StopOrbitCommand -> if (!platform.stopOrbit()) {
+                return CommandAcknowledgement.Rejected("Orbit is not active")
+            }
+            is StartFollowCommand -> if (!platform.startFollow(
+                    command.distanceM,
+                    command.altitudeM,
+                    command.speedMps,
+                    command.target
+                )
+            ) {
+                return CommandAcknowledgement.Rejected("Simulator could not start Follow")
+            }
+            StopFollowCommand -> if (!platform.stopFollow()) {
+                return CommandAcknowledgement.Rejected("Follow is not active")
             }
             else -> return CommandAcknowledgement.Unsupported("${command.kind} is not implemented by the simulator")
         }
@@ -94,6 +140,12 @@ class SimulatorCommandAdapter(
             PauseMissionCommand -> awaitMissionPhase(MissionExecutionPhase.PAUSED)
             ResumeMissionCommand -> awaitMissionPhase(MissionExecutionPhase.ACTIVE)
             AbortMissionCommand -> awaitMissionPhase(MissionExecutionPhase.ABORTED)
+            ReturnToHomeCommand -> awaitSmartTerminal(SmartFlightMode.RETURN_TO_HOME)
+            CancelReturnToHomeCommand -> awaitSmartCancellation(SmartFlightMode.RETURN_TO_HOME)
+            is StartOrbitCommand -> awaitSmartTerminal(SmartFlightMode.ORBIT)
+            StopOrbitCommand -> awaitSmartCancellation(SmartFlightMode.ORBIT)
+            is StartFollowCommand -> awaitSmartTerminal(SmartFlightMode.FOLLOW)
+            StopFollowCommand -> awaitSmartCancellation(SmartFlightMode.FOLLOW)
             else -> CommandCompletion.Failed("${command.kind} has no simulator completion rule")
         }
     }
@@ -134,12 +186,39 @@ class SimulatorCommandAdapter(
         }
     }
 
+    private suspend fun awaitSmartTerminal(mode: SmartFlightMode): CommandCompletion {
+        val state = platform.smartFlightExecution.first {
+            it.mode == mode && it.phase in SMART_TERMINAL_PHASES
+        }
+        return when (state.phase) {
+            SmartFlightPhase.COMPLETED -> CommandCompletion.Completed(state.detail)
+            SmartFlightPhase.CANCELLED -> CommandCompletion.Cancelled(state.detail)
+            else -> CommandCompletion.Failed(state.detail ?: "$mode failed")
+        }
+    }
+
+    private suspend fun awaitSmartCancellation(mode: SmartFlightMode): CommandCompletion {
+        val state = platform.smartFlightExecution.first {
+            it.mode == mode && it.phase in SMART_TERMINAL_PHASES
+        }
+        return if (state.phase == SmartFlightPhase.CANCELLED) {
+            CommandCompletion.Completed(state.detail)
+        } else {
+            CommandCompletion.Failed(state.detail ?: "$mode did not cancel")
+        }
+    }
+
     private companion object {
         val FLIGHT_START_COMMANDS = setOf(CommandKind.ARM, CommandKind.TAKEOFF)
         val MISSION_TERMINAL_PHASES = setOf(
             MissionExecutionPhase.COMPLETED,
             MissionExecutionPhase.ABORTED,
             MissionExecutionPhase.FAILED
+        )
+        val SMART_TERMINAL_PHASES = setOf(
+            SmartFlightPhase.COMPLETED,
+            SmartFlightPhase.CANCELLED,
+            SmartFlightPhase.FAILED
         )
     }
 }

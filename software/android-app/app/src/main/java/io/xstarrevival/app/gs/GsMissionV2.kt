@@ -50,6 +50,9 @@ import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.groundstation.MissionReviewAnalyzer
 import io.xstarrevival.core.groundstation.MissionValidator
 import io.xstarrevival.core.groundstation.MissionWaypoint
+import io.xstarrevival.core.groundstation.SmartFlightExecutionState
+import io.xstarrevival.core.groundstation.SmartFlightMode
+import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.sim.SimulatorMissionModel
@@ -60,11 +63,16 @@ fun GsMissionV2Screen(
     state: XStarState,
     source: TelemetrySource,
     execution: MissionExecutionState,
+    smartFlight: SmartFlightExecutionState,
     commandStatus: CommandStatus?,
     onStart: (MissionPlan) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onAbort: () -> Unit
+    onAbort: () -> Unit,
+    onStartOrbit: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
+    onStopOrbit: () -> Unit,
+    onStartFollow: (Double, Double, Double) -> Unit,
+    onStopFollow: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember(context) { GsMissionStore(context.applicationContext) }
@@ -107,8 +115,12 @@ fun GsMissionV2Screen(
                 onAbort = onAbort,
                 modifier = Modifier.weight(1f)
             )
-            GsMissionMode.ORBIT -> OrbitEditor(state, Modifier.weight(1f))
-            GsMissionMode.FOLLOW -> FollowEditor(state, Modifier.weight(1f))
+            GsMissionMode.ORBIT -> OrbitEditor(
+                state, source, smartFlight, onStartOrbit, onStopOrbit, Modifier.weight(1f)
+            )
+            GsMissionMode.FOLLOW -> FollowEditor(
+                state, source, smartFlight, onStartFollow, onStopFollow, Modifier.weight(1f)
+            )
         }
     }
 }
@@ -381,20 +393,43 @@ private fun MissionPathCanvas(plan: MissionPlan) {
 }
 
 @Composable
-private fun OrbitEditor(state: XStarState, modifier: Modifier = Modifier) {
+private fun OrbitEditor(
+    state: XStarState,
+    source: TelemetrySource,
+    execution: SmartFlightExecutionState,
+    onStart: (GeoPoint, Double, Double, Double, Boolean, Int) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     var radius by remember { mutableFloatStateOf(35f) }
     var altitude by remember { mutableFloatStateOf(45f) }
     var speed by remember { mutableFloatStateOf(4f) }
+    var laps by remember { mutableFloatStateOf(1f) }
+    var clockwise by remember { mutableStateOf(true) }
+    var reviewOpen by remember { mutableStateOf(false) }
+    val point = state.navigation.latitudeDeg?.let { latitude ->
+        state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+    }
+    val active = execution.mode == SmartFlightMode.ORBIT && execution.phase == SmartFlightPhase.ACTIVE
+    val canStart = source == TelemetrySource.SIMULATOR && state.aircraft.armed == true &&
+        (state.navigation.altitudeM ?: 0.0) > .2 && point != null && execution.phase != SmartFlightPhase.ACTIVE
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         GsSectionCard("ORBIT", Modifier.width(360.dp).fillMaxHeight()) {
             GsSettingLine("Point of interest", "Select on map")
             MissionSlider("Radius", radius, 10f..200f, "m") { radius = it }
             MissionSlider("Altitude", altitude, 5f..120f, "m") { altitude = it }
             MissionSlider("Speed", speed, 1f..10f, "m/s") { speed = it }
-            GsSettingLine("Direction", "Clockwise")
+            MissionSlider("Laps", laps, 1f..10f, "") { laps = it }
+            OutlinedButton(onClick = { clockwise = !clockwise }) { Text(if (clockwise) "CLOCKWISE" else "COUNTER-CLOCKWISE") }
             GsSettingLine("Camera", "Face POI")
             GsSettingLine("Completion", "Hover")
-            Button(onClick = { }, enabled = state.connection is ConnectionState.Connected, modifier = Modifier.fillMaxWidth()) { Text("REVIEW ORBIT") }
+            if (active) {
+                SmartFlightExecutionPanel(execution)
+                OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("STOP ORBIT") }
+            } else {
+                Button(onClick = { reviewOpen = true }, enabled = canStart, modifier = Modifier.fillMaxWidth()) { Text("REVIEW ORBIT") }
+            }
+            if (source != TelemetrySource.SIMULATOR) Text("Orbit execution is simulator-only.", color = GsColors.Muted, fontSize = 9.sp)
         }
         Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
             Canvas(Modifier.fillMaxSize()) {
@@ -403,26 +438,97 @@ private fun OrbitEditor(state: XStarState, modifier: Modifier = Modifier) {
             }
         }
     }
+    if (reviewOpen && point != null) {
+        AlertDialog(
+            onDismissRequest = { reviewOpen = false },
+            title = { Text("REVIEW ORBIT") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GsSettingLine("Point of interest", "%.5f, %.5f".format(point.latitudeDeg, point.longitudeDeg))
+                    GsSettingLine("Radius / altitude", "${radius.toInt()} m / ${altitude.toInt()} m")
+                    GsSettingLine("Speed", "%.1f m/s".format(speed))
+                    GsSettingLine("Direction", if (clockwise) "Clockwise" else "Counter-clockwise")
+                    GsSettingLine("Laps", laps.toInt().toString())
+                }
+            },
+            dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = {
+                    onStart(point, radius.toDouble(), altitude.toDouble(), speed.toDouble(), clockwise, laps.toInt())
+                    reviewOpen = false
+                }) { Text("START ORBIT") }
+            }
+        )
+    }
 }
 
 @Composable
-private fun FollowEditor(state: XStarState, modifier: Modifier = Modifier) {
+private fun FollowEditor(
+    state: XStarState,
+    source: TelemetrySource,
+    execution: SmartFlightExecutionState,
+    onStart: (Double, Double, Double) -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     var distance by remember { mutableFloatStateOf(20f) }
     var altitude by remember { mutableFloatStateOf(30f) }
+    var speed by remember { mutableFloatStateOf(5f) }
+    var reviewOpen by remember { mutableStateOf(false) }
+    val active = execution.mode == SmartFlightMode.FOLLOW && execution.phase == SmartFlightPhase.ACTIVE
+    val canStart = source == TelemetrySource.SIMULATOR && state.aircraft.armed == true &&
+        (state.navigation.altitudeM ?: 0.0) > .2 && execution.phase != SmartFlightPhase.ACTIVE
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         GsSectionCard("FOLLOW", Modifier.width(360.dp).fillMaxHeight()) {
-            GsSettingLine("Target", "Operator device GPS")
+            GsSettingLine("Target", "Simulated operator at Home Point")
             MissionSlider("Distance",distance,5f..100f,"m") { distance=it }
             MissionSlider("Altitude",altitude,5f..120f,"m") { altitude=it }
+            MissionSlider("Speed",speed,1f..10f,"m/s") { speed=it }
             GsSettingLine("Relative position", "Behind")
             GsSettingLine("Camera", "Face target")
             GsSettingLine("Target loss", "Hover")
-            Button(onClick = { }, enabled = state.connection is ConnectionState.Connected, modifier = Modifier.fillMaxWidth()) { Text("REVIEW FOLLOW") }
+            if (active) {
+                SmartFlightExecutionPanel(execution)
+                OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("STOP FOLLOW") }
+            } else {
+                Button(onClick = { reviewOpen = true }, enabled = canStart, modifier = Modifier.fillMaxWidth()) { Text("REVIEW FOLLOW") }
+            }
+            if (source != TelemetrySource.SIMULATOR) Text("Follow execution is simulator-only.", color = GsColors.Muted, fontSize = 9.sp)
         }
         Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
             Box(Modifier.fillMaxSize()) { Text("FOLLOW GEOMETRY PREVIEW", Modifier.align(Alignment.Center), color = GsColors.Muted) }
         }
     }
+    if (reviewOpen) {
+        AlertDialog(
+            onDismissRequest = { reviewOpen = false },
+            title = { Text("REVIEW FOLLOW") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GsSettingLine("Target", "Simulated operator at Home Point")
+                    GsSettingLine("Distance / altitude", "${distance.toInt()} m / ${altitude.toInt()} m")
+                    GsSettingLine("Maximum speed", "%.1f m/s".format(speed))
+                    GsSettingLine("Target loss", "Hover")
+                }
+            },
+            dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = {
+                    onStart(distance.toDouble(), altitude.toDouble(), speed.toDouble())
+                    reviewOpen = false
+                }) { Text("START FOLLOW") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SmartFlightExecutionPanel(state: SmartFlightExecutionState) {
+    Text("${state.mode.name.replace('_', ' ')} · ${state.phase}", color = GsColors.Orange, fontWeight = FontWeight.Bold)
+    state.progress?.let { GsSettingLine("Progress", "${(it * 100).toInt()}%") }
+    if (state.targetLaps != null) GsSettingLine("Laps", "${state.completedLaps ?: 0} / ${state.targetLaps}")
+    state.distanceToTargetM?.let { GsSettingLine("Target distance", "%.1f m".format(it)) }
+    state.detail?.let { Text(it, color = GsColors.Muted, fontSize = 9.sp) }
 }
 
 @Composable

@@ -71,6 +71,19 @@ data class MissionExecutionState(
     val detail: String? = null
 )
 
+enum class SmartFlightMode { NONE, RETURN_TO_HOME, ORBIT, FOLLOW }
+enum class SmartFlightPhase { IDLE, ACTIVE, COMPLETED, CANCELLED, FAILED }
+
+data class SmartFlightExecutionState(
+    val mode: SmartFlightMode = SmartFlightMode.NONE,
+    val phase: SmartFlightPhase = SmartFlightPhase.IDLE,
+    val progress: Double? = null,
+    val completedLaps: Int? = null,
+    val targetLaps: Int? = null,
+    val distanceToTargetM: Double? = null,
+    val detail: String? = null
+)
+
 data class MissionReview(
     val totalDistanceM: Double,
     val estimatedDurationSeconds: Double,
