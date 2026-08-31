@@ -1,5 +1,7 @@
 package io.xstarrevival.core.model
 
+import kotlin.math.absoluteValue
+
 data class XStarState(
     val connection: ConnectionState = ConnectionState.Disconnected,
     val aircraft: AircraftState = AircraftState(),
@@ -31,6 +33,7 @@ data class AircraftState(
 )
 
 data class BatteryState(
+    val packId: String? = null,
     val percent: Int? = null,
     val packVoltageV: Double? = null,
     val currentA: Double? = null,
@@ -42,8 +45,13 @@ data class BatteryState(
     val dischargeCount: Int? = null,
     val firmwareVersion: String? = null
 ) {
+    val powerW: Double?
+        get() = packVoltageV?.takeIf { it.isFinite() }?.let { voltage ->
+            currentA?.takeIf { it.isFinite() }?.let { current -> voltage * current.absoluteValue }
+        }
+
     val cellDeltaV: Double?
-        get() = cells.mapNotNull { it.voltageV }.takeIf { it.size >= 2 }?.let { values ->
+        get() = cells.mapNotNull { it.voltageV?.takeIf(Double::isFinite) }.takeIf { it.size >= 2 }?.let { values ->
             values.maxOrNull()!! - values.minOrNull()!!
         }
 }

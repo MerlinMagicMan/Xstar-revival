@@ -56,7 +56,8 @@ fun GsSettingsV2Screen(
     source: TelemetrySource,
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
-    onSimulatorControllerCalibration: () -> Unit
+    onSimulatorControllerCalibration: () -> Unit,
+    onBatteryHistory: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember(context) { GsSettingsStore(context.applicationContext) }
@@ -110,7 +111,7 @@ fun GsSettingsV2Screen(
                         source,
                         onSimulatorVideoLinkChannel
                     )
-                    GsSettingsFamily.BATTERY -> BatterySettings(settings, update)
+                    GsSettingsFamily.BATTERY -> BatterySettings(settings, update, onBatteryHistory)
                     GsSettingsFamily.GIMBAL -> GimbalSettings(settings, update)
                     GsSettingsFamily.GENERAL -> GeneralSettings(settings, update)
                 }
@@ -249,12 +250,12 @@ private fun VideoLinkSettings(
 }
 
 @Composable
-private fun BatterySettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+private fun BatterySettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit, onBatteryHistory: () -> Unit) {
     SettingsSlider("Low battery warning", settings.lowBatteryPercent.toFloat(), 20f..50f, "%") { update(settings.copy(lowBatteryPercent = it.toInt())) }
     SettingsSlider("Critical battery warning", settings.criticalBatteryPercent.toFloat(), 8f..25f, "%") { update(settings.copy(criticalBatteryPercent = it.toInt())) }
     SettingsSlider("Mission reserve", settings.missionReservePercent.toFloat(), 15f..50f, "%") { update(settings.copy(missionReservePercent = it.toInt())) }
     SettingsSlider("Cell-imbalance warning", settings.cellDeltaWarningV, .02f..0.15f, "V") { update(settings.copy(cellDeltaWarningV = it)) }
-    SettingsAction("Battery history", "Cycles, health, capacity and temperature events")
+    SettingsAction("Battery history", "Cycles, health, capacity and temperature events", onClick = onBatteryHistory)
 }
 
 @Composable

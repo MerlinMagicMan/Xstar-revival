@@ -151,6 +151,9 @@ class GroundStationDomainTest {
         val battery = BatteryState(
             designCapacityMah = 4900,
             fullCapacityMah = 4410,
+            remainingCapacityMah = 2205,
+            packVoltageV = 15.8,
+            currentA = 7.0,
             cells = listOf(
                 CellState(1, 4.10),
                 CellState(2, 4.01),
@@ -161,7 +164,20 @@ class GroundStationDomainTest {
         val assessment = BatteryHealthAnalyzer.assess(battery)
         assertEquals(90, assessment.healthPercent)
         assertEquals(BatteryHealthBand.GOOD, assessment.band)
+        assertEquals(110.6, assessment.powerW!!, .001)
+        assertEquals(18.9, assessment.estimatedRemainingFlightMinutes!!, .1)
         assertTrue(assessment.advisories.any { it.contains("imbalance", ignoreCase = true) })
+    }
+
+    @Test
+    fun batteryProfileCapacityOverridesMissingDesignCapacity() {
+        val assessment = BatteryHealthAnalyzer.assess(
+            BatteryState(fullCapacityMah = 3_600),
+            ratedCapacityMah = 4_800
+        )
+
+        assertEquals(75, assessment.healthPercent)
+        assertEquals(BatteryHealthBand.FAIR, assessment.band)
     }
 
     @Test

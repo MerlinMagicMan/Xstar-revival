@@ -59,6 +59,7 @@ class MockXStarPlatform(
             flightMode = "GPS"
         ),
         battery = BatteryState(
+            packId = "MOCK-XSTAR-BATTERY-001",
             percent = 82,
             packVoltageV = 16.12,
             currentA = 1.3,

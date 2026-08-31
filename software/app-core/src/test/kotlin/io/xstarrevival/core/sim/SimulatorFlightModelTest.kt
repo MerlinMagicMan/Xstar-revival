@@ -47,6 +47,10 @@ class SimulatorFlightModelTest {
         assertTrue(state.yawDeg in 70.0..90.0)
         assertTrue(state.groundSpeedMps > 0.0)
         assertTrue((telemetry.navigation.latitudeDeg ?: 0.0) != 41.8781)
+        assertEquals("SIM-XSTAR-BATTERY-001", telemetry.battery.packId)
+        assertEquals(4900, telemetry.battery.designCapacityMah)
+        assertEquals(4700, telemetry.battery.fullCapacityMah)
+        assertEquals(41, telemetry.battery.dischargeCount)
         assertEquals("local-simulator", telemetry.diagnostics.source)
     }
 

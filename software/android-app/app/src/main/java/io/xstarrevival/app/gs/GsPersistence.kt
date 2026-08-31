@@ -1,6 +1,7 @@
 package io.xstarrevival.app.gs
 
 import android.content.Context
+import io.xstarrevival.core.groundstation.BatteryHealthAnalyzer
 import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
@@ -93,6 +94,88 @@ class GsPersistence(context: Context) {
         }.sortedByDescending { it.startedAtEpochMs }
     }
 
+    fun ensureIdentifiedBatteryProfile(
+        packId: String,
+        ratedCapacityMah: Int?,
+        timestampEpochMs: Long = System.currentTimeMillis()
+    ): PersistedBatteryProfile {
+        val id = "identified:$packId"
+        loadBatteryProfiles().firstOrNull { it.id == id }?.let { existing ->
+            val reportedCapacity = ratedCapacityMah?.takeIf { it > 0 }
+            if (reportedCapacity != null && reportedCapacity != existing.ratedCapacityMah) {
+                return existing.copy(ratedCapacityMah = reportedCapacity).also(::saveBatteryProfile)
+            }
+            return existing
+        }
+        return PersistedBatteryProfile(
+            id = id,
+            name = "X-Star Pack ${packId.takeLast(4)}",
+            kind = "ORIGINAL",
+            ratedCapacityMah = ratedCapacityMah?.takeIf { it > 0 } ?: 4_900,
+            telemetryIdentity = packId,
+            createdAtEpochMs = timestampEpochMs
+        ).also(::saveBatteryProfile)
+    }
+
+    fun saveBatteryProfile(profile: PersistedBatteryProfile) {
+        val profiles = loadBatteryProfiles().filterNot { it.id == profile.id } + profile.normalized()
+        val encoded = JSONArray().also { array -> profiles.sortedBy { it.createdAtEpochMs }.forEach { array.put(it.toJson()) } }
+        prefs.edit().putString(KEY_BATTERY_PROFILES, encoded.toString()).apply()
+    }
+
+    fun loadBatteryProfiles(): List<PersistedBatteryProfile> {
+        val array = runCatching { JSONArray(prefs.getString(KEY_BATTERY_PROFILES, "[]")) }.getOrElse { JSONArray() }
+        return buildList {
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.toBatteryProfileOrNull()?.let(::add)
+            }
+        }.sortedBy { it.createdAtEpochMs }
+    }
+
+    fun setActiveBatteryProfileId(profileId: String?) {
+        prefs.edit().apply {
+            if (profileId == null) remove(KEY_ACTIVE_BATTERY_PROFILE) else putString(KEY_ACTIVE_BATTERY_PROFILE, profileId)
+        }.apply()
+    }
+
+    fun loadActiveBatteryProfileId(): String? = prefs.getString(KEY_ACTIVE_BATTERY_PROFILE, null)
+
+    fun saveBatteryHistorySample(
+        profile: PersistedBatteryProfile,
+        state: XStarState,
+        timestampEpochMs: Long = System.currentTimeMillis()
+    ) {
+        val battery = state.battery
+        if (listOf(battery.percent, battery.packVoltageV, battery.temperatureC, battery.fullCapacityMah).all { it == null }) return
+        val assessment = BatteryHealthAnalyzer.assess(battery, profile.ratedCapacityMah)
+        val sample = PersistedBatterySample(
+            timestampEpochMs = timestampEpochMs,
+            percent = battery.percent,
+            packVoltageV = battery.packVoltageV?.takeIf { it.isFinite() },
+            currentA = battery.currentA?.takeIf { it.isFinite() },
+            temperatureC = battery.temperatureC?.takeIf { it.isFinite() },
+            fullCapacityMah = battery.fullCapacityMah,
+            cycleCount = battery.dischargeCount,
+            healthPercent = assessment.healthPercent,
+            cellVoltagesV = battery.cells.mapNotNull { it.voltageV?.takeIf(Double::isFinite) },
+            cellDeltaV = battery.cellDeltaV?.takeIf { it.isFinite() }
+        )
+        val root = runCatching { JSONObject(prefs.getString(KEY_BATTERY_HISTORY, "{}") ?: "{}") }.getOrElse { JSONObject() }
+        val history = root.optJSONArray(profile.id) ?: JSONArray()
+        history.put(sample.toJson())
+        while (history.length() > MAX_BATTERY_HISTORY_SAMPLES) history.remove(0)
+        root.put(profile.id, history)
+        prefs.edit().putString(KEY_BATTERY_HISTORY, root.toString()).apply()
+    }
+
+    fun loadBatteryHistory(profileId: String): List<PersistedBatterySample> {
+        val root = runCatching { JSONObject(prefs.getString(KEY_BATTERY_HISTORY, "{}") ?: "{}") }.getOrElse { return emptyList() }
+        val array = root.optJSONArray(profileId) ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) array.optJSONObject(index)?.toBatterySampleOrNull()?.let(::add)
+        }.sortedByDescending { it.timestampEpochMs }
+    }
+
     private fun loadRecoveryJson(): JSONArray = runCatching { JSONArray(prefs.getString(KEY_RECOVERY, "[]")) }.getOrElse { JSONArray() }
     private fun loadFlightJson(): JSONArray = runCatching { JSONArray(prefs.getString(KEY_FLIGHTS, "[]")) }.getOrElse { JSONArray() }
 
@@ -155,9 +238,13 @@ class GsPersistence(context: Context) {
     private companion object {
         const val KEY_RECOVERY = "recovery_points"
         const val KEY_FLIGHTS = "flight_summaries"
+        const val KEY_BATTERY_PROFILES = "battery_profiles"
+        const val KEY_ACTIVE_BATTERY_PROFILE = "active_battery_profile"
+        const val KEY_BATTERY_HISTORY = "battery_history"
         const val MAX_RECOVERY_POINTS = 180
         const val MAX_FLIGHT_RECORDS = 500
         const val MAX_FLIGHT_REPLAYS = 50
+        const val MAX_BATTERY_HISTORY_SAMPLES = 720
     }
 }
 
@@ -181,6 +268,91 @@ data class PersistedFlightSample(
     val headingDeg: Double?,
     val batteryPercent: Int?
 )
+
+data class PersistedBatteryProfile(
+    val id: String,
+    val name: String,
+    val kind: String,
+    val ratedCapacityMah: Int,
+    val telemetryIdentity: String? = null,
+    val createdAtEpochMs: Long
+) {
+    fun normalized() = copy(
+        name = name.trim().take(40).ifEmpty { "Battery Pack" },
+        kind = kind.takeIf { it in batteryProfileKinds } ?: "CUSTOM",
+        ratedCapacityMah = ratedCapacityMah.coerceIn(500, 20_000)
+    )
+}
+
+data class PersistedBatterySample(
+    val timestampEpochMs: Long,
+    val percent: Int?,
+    val packVoltageV: Double?,
+    val currentA: Double?,
+    val temperatureC: Double?,
+    val fullCapacityMah: Int?,
+    val cycleCount: Int?,
+    val healthPercent: Int?,
+    val cellVoltagesV: List<Double>,
+    val cellDeltaV: Double?
+) {
+    val highTemperatureEvent: Boolean get() = temperatureC?.let { it >= 50.0 } == true
+    val lowVoltageEvent: Boolean get() = cellVoltagesV.minOrNull()?.let { it <= 3.4 } == true
+    val imbalanceEvent: Boolean get() = cellDeltaV?.let { it >= .08 } == true
+}
+
+internal val batteryProfileKinds = setOf("ORIGINAL", "REBUILT", "AFTERMARKET", "CUSTOM", "ALTERNATE_BMS")
+
+private fun PersistedBatteryProfile.toJson() = JSONObject()
+    .put("id", id)
+    .put("name", name)
+    .put("kind", kind)
+    .put("rated", ratedCapacityMah)
+    .putNullable("identity", telemetryIdentity)
+    .put("created", createdAtEpochMs)
+
+private fun JSONObject.toBatteryProfileOrNull(): PersistedBatteryProfile? {
+    val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    return PersistedBatteryProfile(
+        id = id,
+        name = optString("name", "Battery Pack"),
+        kind = optString("kind", "CUSTOM"),
+        ratedCapacityMah = optInt("rated", 4_900),
+        telemetryIdentity = optString("identity").takeIf { has("identity") && !isNull("identity") && it.isNotBlank() },
+        createdAtEpochMs = optLong("created", 0L)
+    ).normalized()
+}
+
+private fun PersistedBatterySample.toJson() = JSONObject()
+    .put("time", timestampEpochMs)
+    .putNullable("percent", percent)
+    .putNullable("voltage", packVoltageV)
+    .putNullable("current", currentA)
+    .putNullable("temperature", temperatureC)
+    .putNullable("full", fullCapacityMah)
+    .putNullable("cycles", cycleCount)
+    .putNullable("health", healthPercent)
+    .put("cells", JSONArray(cellVoltagesV))
+    .putNullable("delta", cellDeltaV)
+
+private fun JSONObject.toBatterySampleOrNull(): PersistedBatterySample? {
+    val timestamp = optLong("time", 0L).takeIf { it > 0 } ?: return null
+    val cells = optJSONArray("cells")?.let { array ->
+        buildList { for (index in 0 until array.length()) array.optDouble(index, Double.NaN).takeIf { it.isFinite() }?.let(::add) }
+    }.orEmpty()
+    return PersistedBatterySample(
+        timestampEpochMs = timestamp,
+        percent = optNullableInt("percent"),
+        packVoltageV = optNullableDouble("voltage"),
+        currentA = optNullableDouble("current"),
+        temperatureC = optNullableDouble("temperature"),
+        fullCapacityMah = optNullableInt("full"),
+        cycleCount = optNullableInt("cycles"),
+        healthPercent = optNullableInt("health"),
+        cellVoltagesV = cells,
+        cellDeltaV = optNullableDouble("delta")
+    )
+}
 
 private fun JSONObject.putNullable(key: String, value: Any?): JSONObject = put(key, value ?: JSONObject.NULL)
 private fun JSONObject.optNullableDouble(key: String): Double? = if (!has(key) || isNull(key)) null else optDouble(key).takeIf { it.isFinite() }

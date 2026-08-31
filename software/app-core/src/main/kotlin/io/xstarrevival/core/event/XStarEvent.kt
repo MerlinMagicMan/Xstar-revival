@@ -10,6 +10,7 @@ sealed interface XStarEvent {
     data class ArmStateChanged(val armed: Boolean?, val flightMode: String?) : XStarEvent
 
     data class BatterySnapshot(
+        val packId: String? = null,
         val percent: Int? = null,
         val packVoltageV: Double? = null,
         val currentA: Double? = null,

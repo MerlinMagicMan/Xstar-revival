@@ -35,6 +35,8 @@ import io.xstarrevival.app.gs.GsSessionTracker
 import io.xstarrevival.app.gs.GsSettingsV2Screen
 import io.xstarrevival.app.gs.GsTheme
 import io.xstarrevival.app.gs.PersistedFlightSummary
+import io.xstarrevival.app.gs.PersistedBatteryProfile
+import io.xstarrevival.app.gs.PersistedBatterySample
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionPlan
@@ -138,7 +140,11 @@ private fun GroundStationV2App(
     val sessionTracker = remember(persistence) { GsSessionTracker(persistence) }
     var recoveryPoints by remember { mutableStateOf<List<RecoveryPoint>>(persistence.loadRecoveryPoints()) }
     var flightSummaries by remember { mutableStateOf<List<PersistedFlightSummary>>(persistence.loadFlightSummaries()) }
+    var batteryProfiles by remember { mutableStateOf<List<PersistedBatteryProfile>>(persistence.loadBatteryProfiles()) }
+    var activeBatteryProfileId by remember { mutableStateOf(persistence.loadActiveBatteryProfileId()) }
+    var batteryHistory by remember { mutableStateOf<List<PersistedBatterySample>>(activeBatteryProfileId?.let(persistence::loadBatteryHistory).orEmpty()) }
     var lastRecoveryWriteMs by remember { mutableLongStateOf(0L) }
+    var lastBatteryHistoryWriteMs by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(
         state.navigation.latitudeDeg,
@@ -146,6 +152,13 @@ private fun GroundStationV2App(
         state.navigation.altitudeM,
         state.navigation.groundSpeedMps,
         state.battery.percent,
+        state.battery.packId,
+        state.battery.packVoltageV,
+        state.battery.currentA,
+        state.battery.temperatureC,
+        state.battery.fullCapacityMah,
+        state.battery.dischargeCount,
+        state.battery.cellDeltaV,
         state.aircraft.armed
     ) {
         val now = System.currentTimeMillis()
@@ -155,6 +168,32 @@ private fun GroundStationV2App(
             recoveryPoints = persistence.loadRecoveryPoints()
         }
         if (sessionTracker.observe(state, now)) flightSummaries = persistence.loadFlightSummaries()
+
+        val identifiedProfile = state.battery.packId?.let { packId ->
+            persistence.ensureIdentifiedBatteryProfile(
+                packId,
+                state.battery.designCapacityMah ?: state.battery.fullCapacityMah,
+                now
+            )
+        }
+        var profilesForSample = batteryProfiles
+        var profileIdForSample = activeBatteryProfileId
+        if (identifiedProfile != null) {
+            profilesForSample = persistence.loadBatteryProfiles()
+            batteryProfiles = profilesForSample
+            val active = profilesForSample.firstOrNull { it.id == activeBatteryProfileId }
+            if (active == null || (active.telemetryIdentity != null && active.telemetryIdentity != state.battery.packId)) {
+                profileIdForSample = identifiedProfile.id
+                activeBatteryProfileId = profileIdForSample
+                persistence.setActiveBatteryProfileId(identifiedProfile.id)
+            }
+        }
+        val activeProfile = profilesForSample.firstOrNull { it.id == profileIdForSample }
+        if (activeProfile != null && now - lastBatteryHistoryWriteMs >= 60_000L) {
+            persistence.saveBatteryHistorySample(activeProfile, state, now)
+            lastBatteryHistoryWriteMs = now
+            batteryHistory = persistence.loadBatteryHistory(activeProfile.id)
+        }
     }
 
     Row(Modifier.fillMaxSize().background(GsColors.Ink)) {
@@ -196,13 +235,37 @@ private fun GroundStationV2App(
                 )
                 GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
-                GsPage.AIRCRAFT -> GsAircraftScreen(state)
+                GsPage.AIRCRAFT -> GsAircraftScreen(
+                    state = state,
+                    batteryProfiles = batteryProfiles,
+                    activeBatteryProfileId = activeBatteryProfileId,
+                    batteryHistory = batteryHistory,
+                    onSelectBatteryProfile = { profileId ->
+                        activeBatteryProfileId = profileId
+                        persistence.setActiveBatteryProfileId(profileId)
+                        batteryProfiles.firstOrNull { it.id == profileId }?.let { profile ->
+                            persistence.saveBatteryHistorySample(profile, state)
+                        }
+                        batteryHistory = persistence.loadBatteryHistory(profileId)
+                        lastBatteryHistoryWriteMs = System.currentTimeMillis()
+                    },
+                    onSaveBatteryProfile = { profile ->
+                        persistence.saveBatteryProfile(profile)
+                        batteryProfiles = persistence.loadBatteryProfiles()
+                        activeBatteryProfileId = profile.id
+                        persistence.setActiveBatteryProfileId(profile.id)
+                        persistence.saveBatteryHistorySample(profile, state)
+                        batteryHistory = persistence.loadBatteryHistory(profile.id)
+                        lastBatteryHistoryWriteMs = System.currentTimeMillis()
+                    }
+                )
                 GsPage.SETTINGS -> GsSettingsV2Screen(
                     state,
                     source,
                     onSimulatorVideoLinkChannel,
                     onSimulatorControllerConfiguration,
-                    onSimulatorControllerCalibration
+                    onSimulatorControllerCalibration,
+                    { page = GsPage.AIRCRAFT }
                 )
                 GsPage.HELP -> GsAcademyScreen()
             }

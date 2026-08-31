@@ -11,6 +11,7 @@ class XStarReducerTest {
         val next = XStarReducer.reduce(
             XStarState(),
             XStarEvent.BatterySnapshot(
+                packId = "pack-1",
                 percent = 80,
                 packVoltageV = 16.08,
                 cellVoltagesV = listOf(4.020, 4.018, 4.025, 4.017)
@@ -19,6 +20,7 @@ class XStarReducerTest {
         )
 
         assertEquals(80, next.battery.percent)
+        assertEquals("pack-1", next.battery.packId)
         assertEquals(4, next.battery.cells.size)
         assertTrue((next.battery.cellDeltaV ?: 1.0) < 0.01)
         assertEquals(123L, next.diagnostics.lastUpdateEpochMs)
