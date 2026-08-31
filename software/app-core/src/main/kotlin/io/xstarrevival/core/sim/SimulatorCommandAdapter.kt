@@ -4,6 +4,7 @@ import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CancelReturnToHomeCommand
 import io.xstarrevival.core.command.CalibrateGimbalCommand
+import io.xstarrevival.core.command.CalibrateControllerCommand
 import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CommandAcknowledgement
 import io.xstarrevival.core.command.CommandCompletion
@@ -12,6 +13,7 @@ import io.xstarrevival.core.command.CommandRequest
 import io.xstarrevival.core.command.CommandTransport
 import io.xstarrevival.core.command.ConfigureCameraCommand
 import io.xstarrevival.core.command.ConfigureGimbalCommand
+import io.xstarrevival.core.command.ConfigureControllerCommand
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.EmergencyLandCommand
 import io.xstarrevival.core.command.LandCommand
@@ -64,6 +66,8 @@ class SimulatorCommandAdapter(
         CommandKind.CALIBRATE_GIMBAL,
         CommandKind.CONFIGURE_GIMBAL,
         CommandKind.SET_VIDEO_LINK_CHANNEL,
+        CommandKind.CONFIGURE_CONTROLLER,
+        CommandKind.CALIBRATE_CONTROLLER,
         CommandKind.START_WAYPOINT_MISSION,
         CommandKind.PAUSE_MISSION,
         CommandKind.RESUME_MISSION,
@@ -101,6 +105,15 @@ class SimulatorCommandAdapter(
                 command.pitchSpeed
             )
             is SetVideoLinkChannelCommand -> platform.setVideoLinkChannel(command.automatic, command.channel)
+            is ConfigureControllerCommand -> platform.configureController(
+                command.stickMode,
+                command.sensitivity,
+                command.deadZone,
+                command.expo,
+                command.buttonAssignments,
+                command.gimbalWheelReversed
+            )
+            CalibrateControllerCommand -> platform.calibrateController()
             is StartWaypointMissionCommand -> if (!platform.startMission(command.mission)) {
                 return CommandAcknowledgement.Rejected("Simulator could not start the mission")
             }
@@ -196,6 +209,15 @@ class SimulatorCommandAdapter(
                 it.imageLink.automaticChannel == command.automatic &&
                     (command.automatic || it.imageLink.channel == command.channel)
             }
+            is ConfigureControllerCommand -> awaitState(request) {
+                it.remote.stickMode == command.stickMode &&
+                    it.remote.sensitivity == command.sensitivity &&
+                    it.remote.deadZone == command.deadZone &&
+                    it.remote.expo == command.expo &&
+                    it.remote.buttonAssignments == command.buttonAssignments &&
+                    it.remote.gimbalWheelReversed == command.gimbalWheelReversed
+            }
+            CalibrateControllerCommand -> awaitState(request) { it.remote.calibrated == true }
             TakePhotoCommand -> awaitState(request) { it.camera.photosTaken > 0 }
             is StartWaypointMissionCommand -> awaitMissionTerminal()
             PauseMissionCommand -> awaitMissionPhase(MissionExecutionPhase.PAUSED)

@@ -19,7 +19,7 @@ class PreflightTest {
             connection = ConnectionState.Connected("test", "X-Star Premium"),
             aircraft = AircraftState(armed = false),
             navigation = NavigationState(satellites = 14, homeLatitudeDeg = 35.0, homeLongitudeDeg = -97.0),
-            remote = RemoteState(connected = true, signalPercent = 95),
+            remote = RemoteState(connected = true, signalPercent = 95, calibrated = true),
             battery = BatteryState(
                 percent = 88,
                 temperatureC = 28.0,
@@ -55,5 +55,20 @@ class PreflightTest {
         assertTrue(report.checks.any { it.id == "battery" && it.level == PreflightLevel.UNAVAILABLE })
         assertTrue(report.checks.any { it.id == "gps" && it.level == PreflightLevel.UNAVAILABLE })
         assertTrue(report.checks.any { it.id == "rc" && it.level == PreflightLevel.UNAVAILABLE })
+    }
+
+    @Test
+    fun uncalibratedControllerBlocksTakeoff() {
+        val state = XStarState(
+            connection = ConnectionState.Connected("test", "X-Star Premium"),
+            navigation = NavigationState(satellites = 14),
+            remote = RemoteState(connected = true, calibrated = false),
+            battery = BatteryState(percent = 80)
+        )
+
+        val report = PreflightEvaluator.evaluate(state)
+
+        assertFalse(report.readyToFly)
+        assertTrue(report.checks.any { it.id == "rc_calibration" && it.level == PreflightLevel.BLOCKER })
     }
 }

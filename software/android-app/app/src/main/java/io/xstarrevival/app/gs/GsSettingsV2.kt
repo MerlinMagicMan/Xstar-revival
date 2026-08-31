@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -53,7 +54,9 @@ enum class GsSettingsFamily(val title: String, val subtitle: String) {
 fun GsSettingsV2Screen(
     state: XStarState,
     source: TelemetrySource,
-    onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit
+    onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
+    onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
+    onSimulatorControllerCalibration: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember(context) { GsSettingsStore(context.applicationContext) }
@@ -92,7 +95,14 @@ fun GsSettingsV2Screen(
                 Spacer(Modifier.height(14.dp))
                 when (selected) {
                     GsSettingsFamily.FLIGHT -> FlightControlSettings(settings, update)
-                    GsSettingsFamily.REMOTE -> RemoteSettings(settings, update)
+                    GsSettingsFamily.REMOTE -> RemoteSettings(
+                        settings,
+                        update,
+                        state,
+                        source,
+                        onSimulatorControllerConfiguration,
+                        onSimulatorControllerCalibration
+                    )
                     GsSettingsFamily.VIDEO -> VideoLinkSettings(
                         settings,
                         update,
@@ -121,12 +131,65 @@ private fun FlightControlSettings(settings: GsUserSettings, update: (GsUserSetti
 }
 
 @Composable
-private fun RemoteSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+private fun RemoteSettings(
+    settings: GsUserSettings,
+    update: (GsUserSettings) -> Unit,
+    state: XStarState,
+    source: TelemetrySource,
+    onSimulatorConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
+    onSimulatorCalibration: () -> Unit
+) {
+    val canCommand = source == TelemetrySource.SIMULATOR
+    val grounded = state.aircraft.armed != true && (state.navigation.altitudeM ?: 1.0) <= .2
     SettingsToggle("Stick Mode 2", "Throttle/yaw left; pitch/roll right", settings.controllerMode2) { update(settings.copy(controllerMode2 = it)) }
     SettingsSlider("Stick sensitivity", settings.controllerSensitivity, .1f..1f, "") { update(settings.copy(controllerSensitivity = it)) }
     SettingsSlider("Center dead zone", settings.controllerDeadZone, 0f..0.2f, "") { update(settings.copy(controllerDeadZone = it)) }
-    SettingsAction("Controller calibration", "Center sticks and calibrate full travel")
-    SettingsAction("Button assignments", "Map supported controller buttons")
+    SettingsSlider("Stick expo", settings.controllerExpo, 0f..1f, "") { update(settings.copy(controllerExpo = it)) }
+    SettingsToggle("Reverse gimbal wheel", "Invert the camera pitch wheel direction", settings.controllerGimbalWheelReversed) {
+        update(settings.copy(controllerGimbalWheelReversed = it))
+    }
+    SettingsAction("C1 assignment", settings.controllerC1Action.replace('_', ' ')) {
+        update(settings.copy(controllerC1Action = nextControllerAction(settings.controllerC1Action)))
+    }
+    SettingsAction("C2 assignment", settings.controllerC2Action.replace('_', ' ')) {
+        update(settings.copy(controllerC2Action = nextControllerAction(settings.controllerC2Action)))
+    }
+    Button(
+        onClick = {
+            onSimulatorConfiguration(
+                if (settings.controllerMode2) 2 else 1,
+                settings.controllerSensitivity.toDouble(),
+                settings.controllerDeadZone.toDouble(),
+                settings.controllerExpo.toDouble(),
+                mapOf("C1" to settings.controllerC1Action, "C2" to settings.controllerC2Action),
+                settings.controllerGimbalWheelReversed
+            )
+        },
+        enabled = canCommand,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("APPLY CONTROLLER PROFILE") }
+    SettingsAction(
+        "Controller calibration",
+        "Center sticks and calibrate full travel",
+        enabled = canCommand && grounded,
+        onClick = onSimulatorCalibration
+    )
+    GsSettingLine("Connection", state.remote.connected?.let { if (it) "Connected" else "Disconnected" } ?: "Unknown")
+    GsSettingLine("Controller battery", state.remote.batteryPercent?.let { "$it%" } ?: "Unavailable")
+    GsSettingLine("Signal strength", state.remote.signalPercent?.let { "$it%" } ?: "Unavailable")
+    GsSettingLine("Firmware", state.remote.firmwareVersion ?: "Unavailable")
+    GsSettingLine("Calibration", state.remote.calibrated?.let { if (it) "Calibrated" else "Required" } ?: "Unknown")
+    GsSettingLine("Active stick mode", state.remote.stickMode?.let { "Mode $it" } ?: "Unavailable")
+    GsSettingLine(
+        "Stick input T/Y/P/R",
+        listOf(state.remote.throttleInput, state.remote.yawInput, state.remote.pitchInput, state.remote.rollInput)
+            .takeIf { values -> values.all { it != null } }
+            ?.joinToString(" / ") { "%.2f".format(it) }
+            ?: "Unavailable"
+    )
+    GsSettingLine("Gimbal wheel", state.remote.gimbalWheelInput?.let { "%.2f".format(it) } ?: "Unavailable")
+    if (!canCommand) Text("Controller writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
+    if (!grounded) Text("Controller calibration requires the aircraft landed and disarmed.", color = GsColors.Amber, fontSize = 10.sp)
 }
 
 @Composable
@@ -235,13 +298,21 @@ private fun SettingsSlider(title: String, value: Float, range: ClosedFloatingPoi
 }
 
 @Composable
-private fun SettingsAction(title: String, subtitle: String) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp).clickable { }, colors = CardDefaults.cardColors(containerColor = GsColors.Panel2)) {
+private fun SettingsAction(title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit = {}) {
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp).clickable(enabled = enabled, onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = GsColors.Panel2.copy(alpha = if (enabled) 1f else .45f))
+    ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title, color = GsColors.White, fontWeight = FontWeight.Medium); Text(subtitle, color = GsColors.Muted, fontSize = 11.sp) }
             Text("›", color = GsColors.Orange, fontSize = 24.sp)
         }
     }
+}
+
+private fun nextControllerAction(current: String): String {
+    val actions = listOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "MAP")
+    return actions[(actions.indexOf(current).takeIf { it >= 0 } ?: 0).plus(1) % actions.size]
 }
 
 @Composable

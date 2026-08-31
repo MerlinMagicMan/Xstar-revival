@@ -27,7 +27,19 @@ class SanitizedTelemetryCaptureWriterTest {
                     satellites = 14,
                     altitudeM = 22.4
                 ),
-                remote = RemoteState(signalPercent = 82, opaqueControlMenu = listOf(999_991, 999_992)),
+                remote = RemoteState(
+                    signalPercent = 82,
+                    firmwareVersion = "sim-rc-1",
+                    calibrated = true,
+                    stickMode = 2,
+                    sensitivity = .55,
+                    deadZone = .05,
+                    expo = .35,
+                    buttonAssignments = mapOf("C2" to "MAP", "C1" to "TAKE_PHOTO"),
+                    gimbalWheelReversed = true,
+                    throttleInput = .25,
+                    opaqueControlMenu = listOf(999_991, 999_992)
+                ),
                 imageLink = ImageLinkState(
                     automaticChannel = false,
                     channel = 6,
@@ -52,6 +64,11 @@ class SanitizedTelemetryCaptureWriterTest {
         assertTrue(capture.contains("official_h264_frames"))
         assertTrue(capture.contains("\"channel\":6"))
         assertTrue(capture.contains("\"latency_ms\":48"))
+        assertTrue(capture.contains("\"firmware_version\":\"sim-rc-1\""))
+        assertTrue(capture.contains("\"calibrated\":true"))
+        assertTrue(capture.contains("\"stick_mode\":2"))
+        assertTrue(capture.contains("\"button_assignments\":{\"C1\":\"TAKE_PHOTO\", \"C2\":\"MAP\"}"))
+        assertTrue(capture.contains("\"throttle_input\":0.25"))
         assertFalse(capture.contains("41.8781"))
         assertFalse(capture.contains("-87.6298"))
         assertFalse(capture.contains("999991"))

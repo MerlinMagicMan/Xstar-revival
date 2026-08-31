@@ -40,6 +40,7 @@ enum class CommandKind {
     SET_FLIGHT_LIMITS,
     SET_LEDS,
     CONFIGURE_CONTROLLER,
+    CALIBRATE_CONTROLLER,
     SET_VIDEO_LINK_CHANNEL,
     SET_BATTERY_WARNINGS
 }
@@ -120,9 +121,17 @@ data class SetFlightLimitsCommand(val maximumAltitudeM: Double, val maximumDista
     override val kind = CommandKind.SET_FLIGHT_LIMITS
 }
 data class SetLedsCommand(val enabled: Boolean) : AircraftConfigurationCommand { override val kind = CommandKind.SET_LEDS }
-data class ConfigureControllerCommand(val sensitivity: Double, val deadZone: Double) : AircraftConfigurationCommand {
+data class ConfigureControllerCommand(
+    val stickMode: Int,
+    val sensitivity: Double,
+    val deadZone: Double,
+    val expo: Double,
+    val buttonAssignments: Map<String, String>,
+    val gimbalWheelReversed: Boolean
+) : AircraftConfigurationCommand {
     override val kind = CommandKind.CONFIGURE_CONTROLLER
 }
+data object CalibrateControllerCommand : AircraftConfigurationCommand { override val kind = CommandKind.CALIBRATE_CONTROLLER }
 data class SetVideoLinkChannelCommand(val automatic: Boolean, val channel: Int?) : AircraftConfigurationCommand {
     override val kind = CommandKind.SET_VIDEO_LINK_CHANNEL
 }

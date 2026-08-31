@@ -43,6 +43,12 @@ object PreflightEvaluator {
             null -> PreflightCheck("rc", "Remote controller", PreflightLevel.UNAVAILABLE, "State unavailable")
         }
 
+        checks += when (state.remote.calibrated) {
+            true -> PreflightCheck("rc_calibration", "Controller calibration", PreflightLevel.PASS, "Calibrated")
+            false -> PreflightCheck("rc_calibration", "Controller calibration", PreflightLevel.BLOCKER, "Calibration required")
+            null -> PreflightCheck("rc_calibration", "Controller calibration", PreflightLevel.UNAVAILABLE, "State unavailable")
+        }
+
         val batteryPercent = state.battery.percent
         checks += when {
             batteryPercent == null -> PreflightCheck("battery", "Flight battery", PreflightLevel.UNAVAILABLE, "No battery telemetry")
