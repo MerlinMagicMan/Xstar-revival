@@ -16,7 +16,7 @@ class PreflightTest {
     @Test
     fun healthyAircraftIsReady() {
         val state = XStarState(
-            connection = ConnectionState.Connected("test"),
+            connection = ConnectionState.Connected("test", "X-Star Premium"),
             aircraft = AircraftState(armed = false),
             navigation = NavigationState(satellites = 14, homeLatitudeDeg = 35.0, homeLongitudeDeg = -97.0),
             remote = RemoteState(connected = true, signalPercent = 95),
@@ -33,7 +33,7 @@ class PreflightTest {
     @Test
     fun lowBatteryBlocksTakeoff() {
         val state = XStarState(
-            connection = ConnectionState.Connected("test"),
+            connection = ConnectionState.Connected("test", "X-Star Premium"),
             navigation = NavigationState(satellites = 12),
             remote = RemoteState(connected = true),
             battery = BatteryState(percent = 8)
