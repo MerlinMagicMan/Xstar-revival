@@ -20,9 +20,13 @@ import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
+import io.xstarrevival.core.command.StartCourseLockCommand
 import io.xstarrevival.core.command.StartFollowCommand
+import io.xstarrevival.core.command.StartHomeLockCommand
 import io.xstarrevival.core.command.StartOrbitCommand
+import io.xstarrevival.core.command.StopCourseLockCommand
 import io.xstarrevival.core.command.StopFollowCommand
+import io.xstarrevival.core.command.StopHomeLockCommand
 import io.xstarrevival.core.command.StopOrbitCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakeoffCommand
@@ -273,6 +277,24 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopSimulatorFollow() {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopFollowCommand)
+    }
+
+    fun startSimulatorCourseLock(headingDeg: Double) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(StartCourseLockCommand(headingDeg))
+        }
+    }
+
+    fun stopSimulatorCourseLock() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopCourseLockCommand)
+    }
+
+    fun startSimulatorHomeLock() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StartHomeLockCommand)
+    }
+
+    fun stopSimulatorHomeLock() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopHomeLockCommand)
     }
 
     fun toggleSimulatorArm() {

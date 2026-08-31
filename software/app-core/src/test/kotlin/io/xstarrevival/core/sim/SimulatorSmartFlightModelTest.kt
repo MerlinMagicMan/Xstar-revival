@@ -3,9 +3,13 @@ package io.xstarrevival.core.sim
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandPhase
 import io.xstarrevival.core.command.ReturnToHomeCommand
+import io.xstarrevival.core.command.StartCourseLockCommand
 import io.xstarrevival.core.command.StartFollowCommand
+import io.xstarrevival.core.command.StartHomeLockCommand
 import io.xstarrevival.core.command.StartOrbitCommand
+import io.xstarrevival.core.command.StopCourseLockCommand
 import io.xstarrevival.core.command.StopFollowCommand
+import io.xstarrevival.core.command.StopHomeLockCommand
 import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.SmartFlightMode
 import io.xstarrevival.core.groundstation.SmartFlightPhase
@@ -83,6 +87,47 @@ class SimulatorSmartFlightModelTest {
     }
 
     @Test
+    fun `course lock transforms translation independently of yaw`() {
+        val snapshot = SimulatorSnapshot(
+            phase = SimulatorFlightPhase.FLYING,
+            altitudeM = 10.0,
+            yawDeg = 90.0
+        )
+        val runtime = SimulatorSmartFlightModel.startCourseLock(0.0)
+        val transformed = SimulatorSmartFlightModel.transformControls(
+            snapshot,
+            runtime,
+            SimulatorControlInput(pitch = 1.0)
+        )
+        val moved = SimulatorFlightModel.step(snapshot, transformed, 0.25)
+
+        assertTrue(moved.northM > 2.0)
+        assertTrue(kotlin.math.abs(moved.eastM) < 0.01)
+        assertEquals(90.0, moved.yawDeg)
+    }
+
+    @Test
+    fun `home lock pull input moves toward home at any yaw`() {
+        val snapshot = SimulatorSnapshot(
+            phase = SimulatorFlightPhase.FLYING,
+            northM = 20.0,
+            altitudeM = 10.0,
+            yawDeg = 90.0
+        )
+        val runtime = SimulatorSmartFlightModel.startHomeLock(snapshot)
+        val transformed = SimulatorSmartFlightModel.transformControls(
+            snapshot,
+            runtime,
+            SimulatorControlInput(pitch = -1.0)
+        )
+        val moved = SimulatorFlightModel.step(snapshot, transformed, 0.25)
+
+        assertTrue(moved.northM < snapshot.northM)
+        assertTrue(kotlin.math.abs(moved.eastM) < 0.01)
+        assertEquals(90.0, moved.yawDeg)
+    }
+
+    @Test
     fun `dispatcher reconciles rth orbit and follow stop`() = runTest {
         val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
         platform.connect()
@@ -136,6 +181,68 @@ class SimulatorSmartFlightModelTest {
         runCurrent()
 
         assertEquals(SmartFlightPhase.FAILED, platform.smartFlightExecution.value.phase)
+        assertEquals(CommandPhase.FAILED, dispatcher.statuses.value.getValue(id).phase)
+    }
+
+    @Test
+    fun `dispatcher reconciles course lock and home lock cancellation`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        platform.takeOff()
+        advanceTimeBy(2_000)
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+
+        val courseId = dispatcher.dispatch(StartCourseLockCommand(45.0))
+        runCurrent()
+        assertEquals(SmartFlightMode.COURSE_LOCK, platform.smartFlightExecution.value.mode)
+        assertEquals(CommandPhase.ACTIVE, dispatcher.statuses.value.getValue(courseId).phase)
+        assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(StopCourseLockCommand).phase)
+        runCurrent()
+        assertEquals(CommandPhase.CANCELLED, dispatcher.statuses.value.getValue(courseId).phase)
+        assertEquals("Course Lock stopped", dispatcher.statuses.value.getValue(courseId).detail)
+
+        val homeId = dispatcher.dispatch(StartHomeLockCommand)
+        runCurrent()
+        assertEquals(SmartFlightMode.HOME_LOCK, platform.smartFlightExecution.value.mode)
+        assertEquals(CommandPhase.ACTIVE, dispatcher.statuses.value.getValue(homeId).phase)
+        assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(StopHomeLockCommand).phase)
+        runCurrent()
+        assertEquals(CommandPhase.CANCELLED, dispatcher.statuses.value.getValue(homeId).phase)
+    }
+
+    @Test
+    fun `rth interrupts course lock and completes`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        platform.takeOff()
+        advanceTimeBy(2_000)
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+        val courseId = dispatcher.dispatch(StartCourseLockCommand(0.0))
+        runCurrent()
+
+        val rth = dispatcher.dispatchAndAwait(ReturnToHomeCommand)
+        runCurrent()
+
+        assertEquals(CommandPhase.COMPLETED, rth.phase)
+        assertEquals(CommandPhase.CANCELLED, dispatcher.statuses.value.getValue(courseId).phase)
+        assertEquals(SmartFlightMode.RETURN_TO_HOME, platform.smartFlightExecution.value.mode)
+    }
+
+    @Test
+    fun `home loss fails home lock`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        platform.takeOff()
+        advanceTimeBy(2_000)
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+        val id = dispatcher.dispatch(StartHomeLockCommand)
+        runCurrent()
+
+        platform.setScenario(SimulatorScenario.HOME_UNAVAILABLE)
+        runCurrent()
+
+        assertEquals(SmartFlightPhase.FAILED, platform.smartFlightExecution.value.phase)
+        assertEquals("Home Point became unavailable", platform.smartFlightExecution.value.detail)
         assertEquals(CommandPhase.FAILED, dispatcher.statuses.value.getValue(id).phase)
     }
 }

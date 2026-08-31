@@ -46,6 +46,7 @@ import io.xstarrevival.app.H264ReplayVideo
 import io.xstarrevival.app.HeartbeatUiState
 import io.xstarrevival.app.LiveVideoStatus
 import io.xstarrevival.app.LiveVideoUiState
+import io.xstarrevival.app.SimulatorFlightControls
 import io.xstarrevival.app.TelemetrySource
 import io.xstarrevival.app.VideoReplayStatus
 import io.xstarrevival.app.VideoReplayUiState
@@ -58,6 +59,7 @@ import io.xstarrevival.core.groundstation.SmartFlightExecutionState
 import io.xstarrevival.core.groundstation.SmartFlightMode
 import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.sim.SimulatorScenario
+import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import kotlin.math.asin
@@ -81,13 +83,16 @@ fun GsCockpitScreen(
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
+    onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartRth: () -> Unit,
     onCancelRth: () -> Unit,
     onGoMissions: () -> Unit,
     onGoAircraft: () -> Unit
 ) {
     var dialog by remember { mutableStateOf<CockpitDialog?>(null) }
-    val commandBusy = source == TelemetrySource.SIMULATOR && commandStatus?.phase?.isTerminal == false
+    val interactiveLockActive = smartFlight.phase == SmartFlightPhase.ACTIVE &&
+        smartFlight.mode in setOf(SmartFlightMode.COURSE_LOCK, SmartFlightMode.HOME_LOCK)
+    val commandBusy = source == TelemetrySource.SIMULATOR && commandStatus?.phase?.isTerminal == false && !interactiveLockActive
     val grounded = (state.navigation.altitudeM ?: 0.0) <= 0.2
     val airborne = state.aircraft.armed == true && !grounded
     val rthActive = smartFlight.mode == SmartFlightMode.RETURN_TO_HOME && smartFlight.phase == SmartFlightPhase.ACTIVE
@@ -118,11 +123,15 @@ fun GsCockpitScreen(
                 Modifier.align(Alignment.BottomEnd).padding(18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                OutlinedButton(onClick = { dialog = CockpitDialog.Controls }, enabled = !commandBusy) { Text("CONTROLS") }
                 OutlinedButton(onClick = onSimulatorArm, enabled = !commandBusy && grounded) {
                     Text(if (state.aircraft.armed == true) "DISARM" else "ARM")
                 }
                 Button(onClick = onSimulatorTakeOff, enabled = !commandBusy && grounded) { Text("TAKEOFF") }
-                OutlinedButton(onClick = onSimulatorLand, enabled = !commandBusy && airborne) { Text("LAND") }
+                OutlinedButton(
+                    onClick = onSimulatorLand,
+                    enabled = !commandBusy && airborne && smartFlight.phase != SmartFlightPhase.ACTIVE
+                ) { Text("LAND") }
             }
             commandStatus?.let {
                 GsCommandStatusPill(it, Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 58.dp))
@@ -177,11 +186,34 @@ fun GsCockpitScreen(
             },
             onDismiss = { dialog = null }
         )
+        CockpitDialog.Controls -> AlertDialog(
+            onDismissRequest = {
+                onSimulatorControls(SimulatorControlInput())
+                dialog = null
+            },
+            title = { Text("SIMULATOR FLIGHT CONTROLS") },
+            text = {
+                SimulatorFlightControls(
+                    state = state,
+                    onControlsChanged = onSimulatorControls,
+                    onToggleArm = onSimulatorArm,
+                    onTakeOff = onSimulatorTakeOff,
+                    onLand = onSimulatorLand,
+                    onToggleRecording = onSimulatorRecord
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSimulatorControls(SimulatorControlInput())
+                    dialog = null
+                }) { Text("CLOSE") }
+            }
+        )
         null -> Unit
     }
 }
 
-private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario }
+private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario, Controls }
 
 @Composable
 private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideoFrames: Flow<H264VideoFrame>, modifier: Modifier = Modifier) {

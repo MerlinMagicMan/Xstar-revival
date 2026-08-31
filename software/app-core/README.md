@@ -96,6 +96,12 @@ configured distance and altitude from a bounded simulated operator target until 
 stick movement is locked while an autonomous mode is active, and GPS, compass, link-loss, and
 forced-landing scenarios produce explicit failed or cancelled terminal states.
 
+Course Lock and Home Lock are also implemented as simulator-only interactive-control modes. Course
+Lock rotates pitch/roll input into a reviewed compass heading while leaving yaw independent. Home
+Lock rotates pitch/roll into the aircraft-to-Home radial frame so the pilot can command movement
+away from, toward, or around Home. Both preserve manual throttle, yaw, and gimbal input; navigation
+or link failures terminate the mode, and Return-to-Home explicitly interrupts it.
+
 ## Official SDK read-only bridge
 
 `AutelSdkBridge` is a proprietary-type-free boundary for an optional Android binding around Autel's legacy AAR. Its public surface contains only initialization, discovery, disconnection, passive refresh, typed observation callbacks, and receive-only H.264 frames.
