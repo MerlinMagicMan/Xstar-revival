@@ -68,9 +68,13 @@ class CommandSafetyValidator {
                         message = issue.message
                     )
                 }
+                if (!PreflightEvaluator.evaluate(state).readyToFly) {
+                    issues += blocking("Preflight checks are not ready")
+                }
                 requireHome(state, issues)
             }
-            PauseMissionCommand, ResumeMissionCommand, AbortMissionCommand -> requireAirborne(state, issues)
+            PauseMissionCommand, ResumeMissionCommand -> requireAirborne(state, issues)
+            AbortMissionCommand -> Unit
             is GoToWaypointCommand -> {
                 requireAirborne(state, issues)
                 validateCoordinates(command.waypoint.latitudeDeg, command.waypoint.longitudeDeg, issues)

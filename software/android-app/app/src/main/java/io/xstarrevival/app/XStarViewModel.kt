@@ -9,14 +9,20 @@ import io.xstarrevival.core.adapter.AutelSdkBridge
 import io.xstarrevival.core.adapter.AutelSdkPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.command.ArmCommand
+import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.LandCommand
+import io.xstarrevival.core.command.PauseMissionCommand
+import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.StartRecordingCommand
+import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakeoffCommand
 import io.xstarrevival.core.mock.MockXStarPlatform
+import io.xstarrevival.core.groundstation.MissionExecutionState
+import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.protocol.mavlink.StandardMavlinkDecoder
@@ -118,6 +124,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     val replayState: StateFlow<CaptureReplayState> = replayTransport.playback
     val commandStatus: StateFlow<CommandStatus?> = simulatorCommands.latest
     val simulatorScenario: StateFlow<SimulatorScenario> = simulatorPlatform.scenario
+    val missionExecution: StateFlow<MissionExecutionState> = simulatorPlatform.missionExecution
 
     private val mutableHeartbeat = MutableStateFlow(HeartbeatUiState())
     val heartbeat: StateFlow<HeartbeatUiState> = mutableHeartbeat.asStateFlow()
@@ -204,6 +211,24 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSimulatorScenario(value: SimulatorScenario) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setScenario(value)
+    }
+
+    fun startSimulatorMission(plan: MissionPlan) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(StartWaypointMissionCommand(plan))
+        }
+    }
+
+    fun pauseSimulatorMission() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(PauseMissionCommand)
+    }
+
+    fun resumeSimulatorMission() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(ResumeMissionCommand)
+    }
+
+    fun abortSimulatorMission() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(AbortMissionCommand)
     }
 
     fun toggleSimulatorArm() {

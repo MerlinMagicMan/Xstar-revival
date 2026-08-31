@@ -135,8 +135,8 @@ class CommandDispatcher(
 
         fun defaultTimeoutMs(kind: CommandKind): Long = when (kind) {
             CommandKind.TAKEOFF, CommandKind.LAND, CommandKind.RETURN_TO_HOME,
-            CommandKind.EMERGENCY_LAND, CommandKind.START_WAYPOINT_MISSION,
-            CommandKind.START_ORBIT, CommandKind.START_FOLLOW -> 30_000L
+            CommandKind.EMERGENCY_LAND, CommandKind.START_ORBIT, CommandKind.START_FOLLOW -> 30_000L
+            CommandKind.START_WAYPOINT_MISSION -> 30 * 60_000L
             CommandKind.CALIBRATE_GIMBAL -> 60_000L
             else -> 5_000L
         }

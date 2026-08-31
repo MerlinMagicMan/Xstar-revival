@@ -86,6 +86,39 @@ class GroundStationDomainTest {
     }
 
     @Test
+    fun missionReviewCalculatesRouteTimeReserveAndUnsupportedActions() {
+        val plan = MissionPlan(
+            id = "m1",
+            name = "Review",
+            waypoints = listOf(
+                MissionWaypoint(
+                    "w1",
+                    GeoPoint(41.8782, -87.6298),
+                    30.0,
+                    5.0,
+                    delaySeconds = 10.0,
+                    actions = listOf(WaypointAction(WaypointActionType.SET_SPEED, value = 8.0))
+                )
+            ),
+            minimumBatteryReservePercent = 25
+        )
+
+        val review = MissionReviewAnalyzer.analyze(
+            plan = plan,
+            start = GeoPoint(41.8781, -87.6298),
+            currentBatteryPercent = 80,
+            supportedActions = setOf(WaypointActionType.START_VIDEO)
+        )
+
+        assertTrue(review.totalDistanceM in 10.0..12.5)
+        assertTrue(review.estimatedDurationSeconds > 12.0)
+        assertEquals(30.0, review.maximumAltitudeM)
+        assertEquals(80 - review.estimatedBatteryUsePercent, review.projectedBatteryPercent)
+        assertEquals((review.projectedBatteryPercent ?: 0) - 25, review.projectedReservePercent)
+        assertTrue(WaypointActionType.SET_SPEED in review.unsupportedActions)
+    }
+
+    @Test
     fun batteryHealthUsesCapacityAndCellDelta() {
         val battery = BatteryState(
             designCapacityMah = 4900,

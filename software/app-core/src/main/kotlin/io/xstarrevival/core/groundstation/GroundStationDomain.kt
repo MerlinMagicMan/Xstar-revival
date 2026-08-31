@@ -6,6 +6,11 @@ import io.xstarrevival.core.model.Severity
 import io.xstarrevival.core.model.XStarState
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.asin
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 data class GeoPoint(val latitudeDeg: Double, val longitudeDeg: Double)
 
@@ -49,6 +54,74 @@ data class MissionValidation(
     val issues: List<MissionIssue>,
     val canExecute: Boolean = issues.none { it.severity == MissionIssueSeverity.BLOCKING }
 )
+
+enum class MissionExecutionPhase { IDLE, ACTIVE, PAUSED, COMPLETED, ABORTED, FAILED }
+
+data class MissionExecutionState(
+    val missionId: String? = null,
+    val missionName: String? = null,
+    val phase: MissionExecutionPhase = MissionExecutionPhase.IDLE,
+    val currentWaypoint: Int? = null,
+    val nextWaypoint: Int? = null,
+    val waypointCount: Int = 0,
+    val minimumBatteryReservePercent: Int? = null,
+    val progress: Double = 0.0,
+    val remainingDistanceM: Double? = null,
+    val etaSeconds: Double? = null,
+    val detail: String? = null
+)
+
+data class MissionReview(
+    val totalDistanceM: Double,
+    val estimatedDurationSeconds: Double,
+    val maximumAltitudeM: Double,
+    val estimatedBatteryUsePercent: Int,
+    val projectedBatteryPercent: Int?,
+    val projectedReservePercent: Int?,
+    val unsupportedActions: Set<WaypointActionType>,
+    val unsupportedFinishBehavior: MissionFinishBehavior?
+)
+
+object MissionReviewAnalyzer {
+    fun analyze(
+        plan: MissionPlan,
+        start: GeoPoint? = null,
+        currentBatteryPercent: Int? = null,
+        supportedActions: Set<WaypointActionType> = WaypointActionType.entries.toSet(),
+        supportedFinishBehaviors: Set<MissionFinishBehavior> = MissionFinishBehavior.entries.toSet()
+    ): MissionReview {
+        var previous = start ?: plan.waypoints.firstOrNull()?.position
+        var distance = 0.0
+        var duration = 0.0
+        plan.waypoints.forEach { waypoint ->
+            val leg = previous?.let { distanceMeters(it, waypoint.position) } ?: 0.0
+            distance += leg
+            duration += leg / waypoint.speedMps.coerceAtLeast(0.5) + waypoint.delaySeconds
+            previous = waypoint.position
+        }
+        val batteryUse = ceil(duration / 60.0 * 1.5).toInt().coerceIn(0, 100)
+        val projected = currentBatteryPercent?.let { (it - batteryUse).coerceAtLeast(0) }
+        return MissionReview(
+            totalDistanceM = distance,
+            estimatedDurationSeconds = duration,
+            maximumAltitudeM = plan.waypoints.maxOfOrNull { it.altitudeM } ?: 0.0,
+            estimatedBatteryUsePercent = batteryUse,
+            projectedBatteryPercent = projected,
+            projectedReservePercent = projected?.minus(plan.minimumBatteryReservePercent),
+            unsupportedActions = plan.waypoints.flatMap { it.actions }.map { it.type }.filterNot { it in supportedActions }.toSet(),
+            unsupportedFinishBehavior = plan.finishBehavior.takeIf { it !in supportedFinishBehaviors }
+        )
+    }
+
+    private fun distanceMeters(a: GeoPoint, b: GeoPoint): Double {
+        val lat1 = Math.toRadians(a.latitudeDeg)
+        val lat2 = Math.toRadians(b.latitudeDeg)
+        val deltaLat = lat2 - lat1
+        val deltaLon = Math.toRadians(b.longitudeDeg - a.longitudeDeg)
+        val haversine = sin(deltaLat / 2) * sin(deltaLat / 2) + cos(lat1) * cos(lat2) * sin(deltaLon / 2) * sin(deltaLon / 2)
+        return 2.0 * 6_371_000.0 * asin(sqrt(haversine.coerceIn(0.0, 1.0)))
+    }
+}
 
 object MissionValidator {
     fun validate(plan: MissionPlan, aircraft: XStarState? = null): MissionValidation {
