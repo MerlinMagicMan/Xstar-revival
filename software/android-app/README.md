@@ -15,6 +15,7 @@ This is the product-facing Android application. Its public build includes mock a
 - diagnostic counters
 - software-only flight simulator with dual virtual sticks, validated takeoff/landing, gimbal, and camera commands
 - visible command acknowledgement, reconciliation, rejection, failure, cancellation, and timeout states
+- selectable simulator scenarios for GPS, compass, RC, HD/video, aircraft-link, battery, and mission failures
 - local flight summaries with bounded, normalized telemetry-path replay for the 50 newest flights
 - last-known-aircraft path history with handoff to an installed maps application
 
@@ -32,6 +33,11 @@ Discrete simulator actions are routed through app core's normalized command disp
 cockpit disables overlapping actions while a command is active and shows the current command phase
 and validation/transport detail. Completion means the expected simulator state was observed, not
 merely that a button callback returned.
+
+The simulator cockpit's scenario picker can reproduce degraded GPS, GPS/compass loss, unavailable
+Home Point, weak/lost/recovered RC and video links, complete aircraft-link loss, low/critical/hot/
+imbalanced/degraded batteries, forced landing, and mission interruption states. Video loss is
+reported separately from aircraft disconnect, and returning to Normal Flight clears the overlay.
 
 ## Build
 

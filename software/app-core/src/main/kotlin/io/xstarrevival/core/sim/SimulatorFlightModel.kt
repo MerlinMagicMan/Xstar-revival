@@ -222,7 +222,7 @@ object SimulatorFlightModel {
                 connected = true,
                 mode = "VIDEO",
                 recording = snapshot.recording,
-                video = VideoState(receiving = false, codec = "SYNTHETIC")
+                video = VideoState(receiving = true, codec = "SYNTHETIC")
             ),
             gimbal = GimbalState(pitchDeg = snapshot.gimbalPitchDeg, status = "SIMULATED"),
             diagnostics = DiagnosticsState(

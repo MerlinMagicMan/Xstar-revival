@@ -38,6 +38,7 @@ import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 
@@ -51,10 +52,12 @@ class GroundStationV2Activity : ComponentActivity() {
                 val source by vm.source.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
                 val commandStatus by vm.commandStatus.collectAsStateWithLifecycle()
+                val simulatorScenario by vm.simulatorScenario.collectAsStateWithLifecycle()
                 GroundStationV2App(
-                    state, source, heartbeat, commandStatus, vm.availableSources, vm.liveVideoFrames,
+                    state, source, heartbeat, commandStatus, simulatorScenario, vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
-                    vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording
+                    vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
+                    vm::setSimulatorScenario
                 )
             }
         }
@@ -67,6 +70,7 @@ private fun GroundStationV2App(
     source: TelemetrySource,
     heartbeat: HeartbeatUiState,
     commandStatus: CommandStatus?,
+    simulatorScenario: SimulatorScenario,
     availableSources: List<TelemetrySource>,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSource: (TelemetrySource) -> Unit,
@@ -76,7 +80,8 @@ private fun GroundStationV2App(
     onSimulatorArm: () -> Unit,
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
-    onSimulatorRecord: () -> Unit
+    onSimulatorRecord: () -> Unit,
+    onSimulatorScenario: (SimulatorScenario) -> Unit
 ) {
     var page by rememberSaveable { mutableStateOf(GsPage.GARAGE) }
     val context = LocalContext.current
@@ -112,8 +117,9 @@ private fun GroundStationV2App(
                     { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS }
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
-                    state, source, heartbeat, commandStatus, liveVideoFrames,
+                    state, source, heartbeat, commandStatus, simulatorScenario, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
+                    onSimulatorScenario,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionV2Screen(state)

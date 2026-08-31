@@ -63,6 +63,16 @@ normalized state.
 `SimulatorXStarPlatform`; neither the official Autel bridge nor the open receive-only transport
 implements `CommandTransport`.
 
+## Deterministic simulator scenarios
+
+The simulator exposes selectable normal, navigation, communications, battery, and mission
+scenarios. Scenario overlays preserve the last normalized values that remain trustworthy while
+explicitly removing unavailable values such as position after GPS loss. Video loss leaves
+telemetry connected; aircraft-link loss retains the last telemetry snapshot; battery scenarios
+provide concrete pack, temperature, capacity, and cell values. Forced landing is the only scenario
+that drives a model action. Every scenario is deterministic and remains isolated from all hardware
+adapters.
+
 ## Official SDK read-only bridge
 
 `AutelSdkBridge` is a proprietary-type-free boundary for an optional Android binding around Autel's legacy AAR. Its public surface contains only initialization, discovery, disconnection, passive refresh, typed observation callbacks, and receive-only H.264 frames.

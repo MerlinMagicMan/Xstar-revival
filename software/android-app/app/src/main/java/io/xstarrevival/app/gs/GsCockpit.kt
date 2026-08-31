@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -51,6 +54,7 @@ import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.isTerminal
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
@@ -61,11 +65,13 @@ fun GsCockpitScreen(
     source: TelemetrySource,
     heartbeat: HeartbeatUiState,
     commandStatus: CommandStatus?,
+    simulatorScenario: SimulatorScenario,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSimulatorArm: () -> Unit,
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
+    onSimulatorScenario: (SimulatorScenario) -> Unit,
     onGoMissions: () -> Unit,
     onGoAircraft: () -> Unit
 ) {
@@ -82,6 +88,7 @@ fun GsCockpitScreen(
             onRth = { dialog = CockpitDialog.Rth },
             onMap = onGoMissions,
             onHome = { dialog = CockpitDialog.Home },
+            onScenario = if (source == TelemetrySource.SIMULATOR) ({ dialog = CockpitDialog.Scenario }) else null,
             modifier = Modifier.align(Alignment.CenterStart).padding(start = 14.dp)
         )
         GsCameraRail(
@@ -138,11 +145,19 @@ fun GsCockpitScreen(
         )
         CockpitDialog.SmartFlight -> GsSmartFlightDialog(onGoMissions, onDismiss = { dialog = null })
         CockpitDialog.Home -> GsHomeDialog(state, onDismiss = { dialog = null })
+        CockpitDialog.Scenario -> GsScenarioDialog(
+            current = simulatorScenario,
+            onSelect = {
+                onSimulatorScenario(it)
+                dialog = null
+            },
+            onDismiss = { dialog = null }
+        )
         null -> Unit
     }
 }
 
-private enum class CockpitDialog { Health, Rth, SmartFlight, Home }
+private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario }
 
 @Composable
 private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideoFrames: Flow<H264VideoFrame>, modifier: Modifier = Modifier) {
@@ -166,6 +181,7 @@ private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideo
             source == TelemetrySource.OFFICIAL_AUTEL && liveState.status != LiveVideoStatus.PLAYING -> "WAITING FOR LIVE H.264"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status == VideoReplayStatus.ERROR -> "REPLAY VIDEO ERROR"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status != VideoReplayStatus.PLAYING -> "WAITING FOR REPLAY VIDEO"
+            source == TelemetrySource.SIMULATOR && !state.camera.video.receiving -> "VIDEO LINK LOST — TELEMETRY REMAINS"
             source == TelemetrySource.SIMULATOR -> "SIMULATION — VALIDATED LOCAL COMMANDS"
             source == TelemetrySource.MOCK -> "MOCK TELEMETRY"
             else -> null
@@ -245,6 +261,7 @@ private fun GsFlightRail(
     onRth: () -> Unit,
     onMap: () -> Unit,
     onHome: () -> Unit,
+    onScenario: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -253,6 +270,7 @@ private fun GsFlightRail(
         GsRailButton("⌂", "RTH", onRth)
         GsRailButton("⌖", "MAP", onMap)
         GsRailButton("H", "HOME", onHome)
+        if (onScenario != null) GsRailButton("⚠", "SCENARIO", onScenario, GsColors.Amber)
     }
 }
 
@@ -376,8 +394,16 @@ private fun GsHealthDialog(state: XStarState, onGoAircraft: () -> Unit, onDismis
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GsHealthRow("Flight controller", state.connection is ConnectionState.Connected)
                 GsHealthRow("GPS / GLONASS", (state.navigation.satellites ?: 0) >= 6, "${state.navigation.satellites ?: 0} satellites")
-                GsHealthRow("Remote controller", state.remote.connected == true || state.connection is ConnectionState.Connected, state.remote.signalPercent?.let { "$it% signal" })
-                GsHealthRow("HD video", state.camera.video.receiving || state.remote.imageSignalPercent != null, state.remote.imageSignalPercent?.let { "$it% signal" })
+                GsHealthRow(
+                    "Remote controller",
+                    state.remote.connected ?: (state.connection is ConnectionState.Connected),
+                    state.remote.signalPercent?.let { "$it% signal" }
+                )
+                GsHealthRow(
+                    "HD video",
+                    state.camera.video.receiving && (state.remote.imageSignalPercent?.let { it >= 20 } ?: true),
+                    state.remote.imageSignalPercent?.let { "$it% signal" }
+                )
                 GsHealthRow("Camera", state.camera.connected == true, state.camera.mode)
                 HorizontalDivider()
                 Text("BATTERY", fontWeight = FontWeight.Bold)
@@ -442,5 +468,47 @@ private fun GsHomeDialog(state: XStarState, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("DONE") } }
+    )
+}
+
+@Composable
+private fun GsScenarioDialog(
+    current: SimulatorScenario,
+    onSelect: (SimulatorScenario) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("SIMULATOR SCENARIO") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                itemsIndexed(SimulatorScenario.entries) { index, scenario ->
+                    if (index == 0 || SimulatorScenario.entries[index - 1].category != scenario.category) {
+                        Text(
+                            scenario.category.label.uppercase(),
+                            color = GsColors.Orange,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = if (index == 0) 0.dp else 8.dp)
+                        )
+                    }
+                    Card(
+                        Modifier.fillMaxWidth().clickable { onSelect(scenario) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (scenario == current) GsColors.Orange.copy(alpha = .18f) else GsColors.Panel2
+                        )
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(scenario.label, color = GsColors.White)
+                            if (scenario == current) Text("ACTIVE", color = GsColors.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("CLOSE") } }
     )
 }
