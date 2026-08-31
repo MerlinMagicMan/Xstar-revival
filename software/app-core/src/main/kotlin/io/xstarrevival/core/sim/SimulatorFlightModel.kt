@@ -72,6 +72,18 @@ data class SimulatorSnapshot(
     val centerPointEnabled: Boolean = false,
     val videoChannelAutomatic: Boolean = true,
     val videoChannel: Int = 7,
+    val controllerStickMode: Int = 2,
+    val controllerSensitivity: Double = .55,
+    val controllerDeadZone: Double = .05,
+    val controllerExpo: Double = .35,
+    val controllerButtonAssignments: Map<String, String> = mapOf("C1" to "TAKE_PHOTO", "C2" to "RECENTER_GIMBAL"),
+    val controllerGimbalWheelReversed: Boolean = false,
+    val controllerCalibrated: Boolean = true,
+    val remoteThrottle: Double = 0.0,
+    val remoteYaw: Double = 0.0,
+    val remotePitch: Double = 0.0,
+    val remoteRoll: Double = 0.0,
+    val remoteGimbalWheel: Double = 0.0,
     val elapsedSeconds: Double = 0.0
 )
 
@@ -182,6 +194,25 @@ object SimulatorFlightModel {
         return snapshot.copy(videoChannelAutomatic = automatic, videoChannel = selected.coerceIn(1, 13))
     }
 
+    fun configureController(
+        snapshot: SimulatorSnapshot,
+        stickMode: Int,
+        sensitivity: Double,
+        deadZone: Double,
+        expo: Double,
+        buttonAssignments: Map<String, String>,
+        gimbalWheelReversed: Boolean
+    ): SimulatorSnapshot = snapshot.copy(
+        controllerStickMode = stickMode,
+        controllerSensitivity = sensitivity,
+        controllerDeadZone = deadZone,
+        controllerExpo = expo,
+        controllerButtonAssignments = buttonAssignments,
+        controllerGimbalWheelReversed = gimbalWheelReversed
+    )
+
+    fun calibrateController(snapshot: SimulatorSnapshot): SimulatorSnapshot = snapshot.copy(controllerCalibrated = true)
+
     fun step(
         snapshot: SimulatorSnapshot,
         rawInput: SimulatorControlInput,
@@ -259,6 +290,11 @@ object SimulatorFlightModel {
             pitchDeg = pitch,
             yawDeg = yaw,
             gimbalPitchDeg = gimbalPitch,
+            remoteThrottle = input.throttle,
+            remoteYaw = input.yaw,
+            remotePitch = input.pitch,
+            remoteRoll = input.roll,
+            remoteGimbalWheel = input.gimbal,
             batteryPercent = (snapshot.batteryPercent - load * dt).coerceAtLeast(0.0),
             elapsedSeconds = snapshot.elapsedSeconds + dt
         )
@@ -298,7 +334,25 @@ object SimulatorFlightModel {
                 ultrasonicHeightM = snapshot.altitudeM.takeIf { it <= 6.0 }
             ),
             attitude = AttitudeState(snapshot.rollDeg, snapshot.pitchDeg, snapshot.yawDeg),
-            remote = RemoteState(connected = true, signalPercent = 100, batteryPercent = 100, imageSignalPercent = 100),
+            remote = RemoteState(
+                connected = true,
+                signalPercent = 100,
+                batteryPercent = 100,
+                imageSignalPercent = 100,
+                firmwareVersion = "sim-rc-1",
+                calibrated = snapshot.controllerCalibrated,
+                stickMode = snapshot.controllerStickMode,
+                sensitivity = snapshot.controllerSensitivity,
+                deadZone = snapshot.controllerDeadZone,
+                expo = snapshot.controllerExpo,
+                buttonAssignments = snapshot.controllerButtonAssignments,
+                gimbalWheelReversed = snapshot.controllerGimbalWheelReversed,
+                throttleInput = snapshot.remoteThrottle,
+                yawInput = snapshot.remoteYaw,
+                pitchInput = snapshot.remotePitch,
+                rollInput = snapshot.remoteRoll,
+                gimbalWheelInput = snapshot.remoteGimbalWheel
+            ),
             camera = CameraState(
                 connected = true,
                 mode = snapshot.cameraMode,

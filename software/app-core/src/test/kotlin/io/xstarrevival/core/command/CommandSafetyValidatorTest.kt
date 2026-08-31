@@ -175,6 +175,35 @@ class CommandSafetyValidatorTest {
     }
 
     @Test
+    fun `controller profiles and calibration are validated`() {
+        val invalidProfile = validator.validate(
+            ConfigureControllerCommand(
+                stickMode = 3,
+                sensitivity = 1.2,
+                deadZone = -.1,
+                expo = 2.0,
+                buttonAssignments = mapOf("C3" to "EJECT"),
+                gimbalWheelReversed = false
+            ),
+            healthyState(),
+            setOf(CommandKind.CONFIGURE_CONTROLLER)
+        )
+        val airborneCalibration = validator.validate(
+            CalibrateControllerCommand,
+            healthyState().copy(
+                aircraft = AircraftState(armed = true, flightMode = "FLYING"),
+                navigation = healthyState().navigation.copy(altitudeM = 10.0)
+            ),
+            setOf(CommandKind.CALIBRATE_CONTROLLER)
+        )
+
+        assertFalse(invalidProfile.canDispatch)
+        assertTrue(invalidProfile.issues.size >= 6)
+        assertFalse(airborneCalibration.canDispatch)
+        assertTrue(airborneCalibration.issues.any { it.message.contains("landed and disarmed") })
+    }
+
+    @Test
     fun `emergency landing remains available during conflicts and critical warnings`() {
         val airborne = healthyState().copy(
             aircraft = AircraftState(armed = true, flightMode = "FLYING"),

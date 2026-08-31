@@ -70,6 +70,7 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm::setSimulatorGimbalPitch, vm::recenterSimulatorGimbal,
                     vm::calibrateSimulatorGimbal, vm::configureSimulatorGimbal,
                     vm::setSimulatorVideoLinkChannel,
+                    vm::configureSimulatorController, vm::calibrateSimulatorController,
                     vm::setSimulatorScenario, vm::setSimulatorControls,
                     vm::startSimulatorMission, vm::pauseSimulatorMission,
                     vm::resumeSimulatorMission, vm::abortSimulatorMission,
@@ -112,6 +113,8 @@ private fun GroundStationV2App(
     onSimulatorGimbalCalibration: () -> Unit,
     onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
+    onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
+    onSimulatorControllerCalibration: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartMission: (MissionPlan) -> Unit,
@@ -194,7 +197,13 @@ private fun GroundStationV2App(
                 GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
                 GsPage.AIRCRAFT -> GsAircraftScreen(state)
-                GsPage.SETTINGS -> GsSettingsV2Screen(state, source, onSimulatorVideoLinkChannel)
+                GsPage.SETTINGS -> GsSettingsV2Screen(
+                    state,
+                    source,
+                    onSimulatorVideoLinkChannel,
+                    onSimulatorControllerConfiguration,
+                    onSimulatorControllerCalibration
+                )
                 GsPage.HELP -> GsAcademyScreen()
             }
         }

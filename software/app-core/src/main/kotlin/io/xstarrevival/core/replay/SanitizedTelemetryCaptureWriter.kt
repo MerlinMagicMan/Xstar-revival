@@ -87,7 +87,20 @@ class SanitizedTelemetryCaptureWriter(
                 "connected" to state.remote.connected,
                 "signal_percent" to state.remote.signalPercent,
                 "battery_percent" to state.remote.batteryPercent,
-                "image_signal_percent" to state.remote.imageSignalPercent
+                "image_signal_percent" to state.remote.imageSignalPercent,
+                "firmware_version" to state.remote.firmwareVersion,
+                "calibrated" to state.remote.calibrated,
+                "stick_mode" to state.remote.stickMode,
+                "sensitivity" to state.remote.sensitivity,
+                "dead_zone" to state.remote.deadZone,
+                "expo" to state.remote.expo,
+                "button_assignments" to state.remote.buttonAssignments.toSortedMap(),
+                "gimbal_wheel_reversed" to state.remote.gimbalWheelReversed,
+                "throttle_input" to state.remote.throttleInput,
+                "yaw_input" to state.remote.yawInput,
+                "pitch_input" to state.remote.pitchInput,
+                "roll_input" to state.remote.rollInput,
+                "gimbal_wheel_input" to state.remote.gimbalWheelInput
             ),
             "camera" to linkedMapOf(
                 "connected" to state.camera.connected,

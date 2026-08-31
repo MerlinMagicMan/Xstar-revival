@@ -127,8 +127,20 @@ class CommandSafetyValidator {
             }
             is SetLedsCommand -> Unit
             is ConfigureControllerCommand -> {
+                if (command.stickMode !in 1..2) issues += blocking("Controller stick mode must be 1 or 2")
                 if (command.sensitivity !in 0.0..1.0) issues += blocking("Controller sensitivity must be between 0 and 1")
                 if (command.deadZone !in 0.0..0.25) issues += blocking("Controller dead zone must be between 0 and 0.25")
+                if (command.expo !in 0.0..1.0) issues += blocking("Controller expo must be between 0 and 1")
+                command.buttonAssignments.forEach { (button, action) ->
+                    if (button !in CONTROLLER_BUTTONS) issues += blocking("Unsupported controller button: $button")
+                    if (action !in CONTROLLER_ACTIONS) issues += blocking("Unsupported controller action: $action")
+                }
+            }
+            CalibrateControllerCommand -> when (val altitude = state.navigation.altitudeM) {
+                null -> issues += blocking("Altitude state is unavailable for controller calibration")
+                else -> if (state.aircraft.armed == true || altitude > .2) {
+                    issues += blocking("Controller calibration requires the aircraft to be landed and disarmed")
+                }
             }
             is SetVideoLinkChannelCommand -> {
                 if (!command.automatic && (command.channel == null || command.channel !in 1..13)) {
@@ -251,6 +263,8 @@ class CommandSafetyValidator {
 
     private companion object {
         val CAMERA_BOOLEAN_KEYS = setOf("histogram", "overexposure_warning", "grid", "center_point")
+        val CONTROLLER_BUTTONS = setOf("C1", "C2")
+        val CONTROLLER_ACTIONS = setOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "MAP")
         val CAMERA_CONFIGURATION_KEYS = CAMERA_BOOLEAN_KEYS + setOf(
             "white_balance",
             "photo_resolution",

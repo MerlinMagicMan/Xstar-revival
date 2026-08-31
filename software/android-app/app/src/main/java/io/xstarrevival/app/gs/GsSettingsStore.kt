@@ -12,6 +12,10 @@ data class GsUserSettings(
     val controllerMode2: Boolean = true,
     val controllerSensitivity: Float = .55f,
     val controllerDeadZone: Float = .05f,
+    val controllerExpo: Float = .35f,
+    val controllerC1Action: String = "TAKE_PHOTO",
+    val controllerC2Action: String = "RECENTER_GIMBAL",
+    val controllerGimbalWheelReversed: Boolean = false,
     val videoChannelAutomatic: Boolean = true,
     val videoChannel: Int = 5,
     val lowBatteryPercent: Int = 30,
@@ -36,6 +40,9 @@ data class GsUserSettings(
         rthAltitudeM = rthAltitudeM.boundedOr(60f, 20f, 150f),
         controllerSensitivity = controllerSensitivity.boundedOr(.55f, .1f, 1f),
         controllerDeadZone = controllerDeadZone.boundedOr(.05f, 0f, .2f),
+        controllerExpo = controllerExpo.boundedOr(.35f, 0f, 1f),
+        controllerC1Action = controllerC1Action.takeIf { it in controllerActions } ?: "TAKE_PHOTO",
+        controllerC2Action = controllerC2Action.takeIf { it in controllerActions } ?: "RECENTER_GIMBAL",
         videoChannel = videoChannel.coerceIn(1, 13),
         lowBatteryPercent = lowBatteryPercent.coerceIn(20, 50).coerceAtLeast(normalizedCritical + 1),
         criticalBatteryPercent = normalizedCritical,
@@ -50,6 +57,8 @@ data class GsUserSettings(
 private fun Float.boundedOr(default: Float, minimum: Float, maximum: Float): Float =
     if (isFinite()) coerceIn(minimum, maximum) else default
 
+private val controllerActions = setOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "MAP")
+
 class GsSettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("xstar-user-settings-v1", Context.MODE_PRIVATE)
 
@@ -63,6 +72,10 @@ class GsSettingsStore(context: Context) {
         controllerMode2 = preferences.getBoolean("controller_mode_2", true),
         controllerSensitivity = preferences.getFloat("controller_sensitivity", .55f),
         controllerDeadZone = preferences.getFloat("controller_dead_zone", .05f),
+        controllerExpo = preferences.getFloat("controller_expo", .35f),
+        controllerC1Action = preferences.getString("controller_c1_action", "TAKE_PHOTO") ?: "TAKE_PHOTO",
+        controllerC2Action = preferences.getString("controller_c2_action", "RECENTER_GIMBAL") ?: "RECENTER_GIMBAL",
+        controllerGimbalWheelReversed = preferences.getBoolean("controller_gimbal_wheel_reversed", false),
         videoChannelAutomatic = preferences.getBoolean("video_channel_automatic", true),
         videoChannel = preferences.getInt("video_channel", 5),
         lowBatteryPercent = preferences.getInt("low_battery_percent", 30),
@@ -92,6 +105,10 @@ class GsSettingsStore(context: Context) {
             .putBoolean("controller_mode_2", value.controllerMode2)
             .putFloat("controller_sensitivity", value.controllerSensitivity)
             .putFloat("controller_dead_zone", value.controllerDeadZone)
+            .putFloat("controller_expo", value.controllerExpo)
+            .putString("controller_c1_action", value.controllerC1Action)
+            .putString("controller_c2_action", value.controllerC2Action)
+            .putBoolean("controller_gimbal_wheel_reversed", value.controllerGimbalWheelReversed)
             .putBoolean("video_channel_automatic", value.videoChannelAutomatic)
             .putInt("video_channel", value.videoChannel)
             .putInt("low_battery_percent", value.lowBatteryPercent)

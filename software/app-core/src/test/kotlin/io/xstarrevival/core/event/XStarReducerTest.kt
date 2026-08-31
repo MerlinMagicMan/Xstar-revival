@@ -135,4 +135,36 @@ class XStarReducerTest {
         assertEquals(7.4, state.imageLink.bandwidthMbps)
     }
 
+    @Test
+    fun remoteSnapshotNormalizesControllerProfileAndInputs() {
+        val state = XStarReducer.reduce(
+            XStarState(),
+            XStarEvent.RemoteSnapshot(
+                connected = true,
+                firmwareVersion = "rc-1",
+                calibrated = true,
+                stickMode = 2,
+                sensitivity = .6,
+                deadZone = .05,
+                expo = .4,
+                buttonAssignments = mapOf("C1" to "MAP"),
+                gimbalWheelReversed = true,
+                throttleInput = .2,
+                yawInput = -.1,
+                pitchInput = .3,
+                rollInput = -.4,
+                gimbalWheelInput = .5
+            ),
+            1L
+        )
+
+        assertEquals("rc-1", state.remote.firmwareVersion)
+        assertEquals(true, state.remote.calibrated)
+        assertEquals(2, state.remote.stickMode)
+        assertEquals(.4, state.remote.expo)
+        assertEquals("MAP", state.remote.buttonAssignments["C1"])
+        assertEquals(-.4, state.remote.rollInput)
+        assertEquals(.5, state.remote.gimbalWheelInput)
+    }
+
 }

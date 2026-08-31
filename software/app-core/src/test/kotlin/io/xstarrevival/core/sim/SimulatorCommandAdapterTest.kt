@@ -5,8 +5,10 @@ import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandPhase
 import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CalibrateGimbalCommand
+import io.xstarrevival.core.command.CalibrateControllerCommand
 import io.xstarrevival.core.command.ConfigureCameraCommand
 import io.xstarrevival.core.command.ConfigureGimbalCommand
+import io.xstarrevival.core.command.ConfigureControllerCommand
 import io.xstarrevival.core.command.RecenterGimbalCommand
 import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
@@ -124,6 +126,37 @@ class SimulatorCommandAdapterTest {
         assertEquals(true, platform.state.value.imageLink.automaticChannel)
         assertEquals(7, platform.state.value.imageLink.channel)
         assertTrue((platform.state.value.imageLink.bandwidthMbps ?: 0.0) > 0.0)
+
+        platform.disconnect()
+    }
+
+    @Test
+    fun `controller commands reconcile calibration profile and input state`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 20)
+        platform.connect()
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+        val assignments = mapOf("C1" to "MAP", "C2" to "RECORD")
+
+        assertEquals(
+            CommandPhase.COMPLETED,
+            dispatcher.dispatchAndAwait(
+                ConfigureControllerCommand(1, .75, .08, .45, assignments, true)
+            ).phase
+        )
+        assertEquals(1, platform.state.value.remote.stickMode)
+        assertEquals(.75, platform.state.value.remote.sensitivity)
+        assertEquals(.08, platform.state.value.remote.deadZone)
+        assertEquals(.45, platform.state.value.remote.expo)
+        assertEquals(assignments, platform.state.value.remote.buttonAssignments)
+        assertEquals(true, platform.state.value.remote.gimbalWheelReversed)
+        assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(CalibrateControllerCommand).phase)
+        assertEquals(true, platform.state.value.remote.calibrated)
+
+        platform.setControls(SimulatorControlInput(throttle = .4, yaw = -.2, pitch = .6, roll = -.7, gimbal = .3))
+        kotlinx.coroutines.delay(40)
+        assertEquals(.4, platform.state.value.remote.throttleInput)
+        assertEquals(-.7, platform.state.value.remote.rollInput)
+        assertEquals(.3, platform.state.value.remote.gimbalWheelInput)
 
         platform.disconnect()
     }

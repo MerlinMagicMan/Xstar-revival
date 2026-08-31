@@ -75,6 +75,19 @@ data class RemoteState(
     val signalPercent: Int? = null,
     val batteryPercent: Int? = null,
     val imageSignalPercent: Int? = null,
+    val firmwareVersion: String? = null,
+    val calibrated: Boolean? = null,
+    val stickMode: Int? = null,
+    val sensitivity: Double? = null,
+    val deadZone: Double? = null,
+    val expo: Double? = null,
+    val buttonAssignments: Map<String, String> = emptyMap(),
+    val gimbalWheelReversed: Boolean? = null,
+    val throttleInput: Double? = null,
+    val yawInput: Double? = null,
+    val pitchInput: Double? = null,
+    val rollInput: Double? = null,
+    val gimbalWheelInput: Double? = null,
     val opaqueControlMenu: List<Int>? = null
 )
 

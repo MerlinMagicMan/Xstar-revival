@@ -13,6 +13,8 @@ class GsUserSettingsTest {
             rthAltitudeM = 5f,
             controllerSensitivity = 2f,
             controllerDeadZone = -1f,
+            controllerExpo = Float.POSITIVE_INFINITY,
+            controllerC1Action = "EJECT",
             videoChannel = 99,
             lowBatteryPercent = 10,
             criticalBatteryPercent = 25,
@@ -27,6 +29,8 @@ class GsUserSettingsTest {
         assertEquals(20f, normalized.rthAltitudeM)
         assertEquals(1f, normalized.controllerSensitivity)
         assertEquals(0f, normalized.controllerDeadZone)
+        assertEquals(.35f, normalized.controllerExpo)
+        assertEquals("TAKE_PHOTO", normalized.controllerC1Action)
         assertEquals(13, normalized.videoChannel)
         assertEquals(26, normalized.lowBatteryPercent)
         assertEquals(25, normalized.criticalBatteryPercent)

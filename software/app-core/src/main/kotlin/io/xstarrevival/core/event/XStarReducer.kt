@@ -66,6 +66,19 @@ object XStarReducer {
                     signalPercent = event.signalPercent ?: state.remote.signalPercent,
                     batteryPercent = event.batteryPercent ?: state.remote.batteryPercent,
                     imageSignalPercent = event.imageSignalPercent ?: state.remote.imageSignalPercent,
+                    firmwareVersion = event.firmwareVersion ?: state.remote.firmwareVersion,
+                    calibrated = event.calibrated ?: state.remote.calibrated,
+                    stickMode = event.stickMode ?: state.remote.stickMode,
+                    sensitivity = event.sensitivity ?: state.remote.sensitivity,
+                    deadZone = event.deadZone ?: state.remote.deadZone,
+                    expo = event.expo ?: state.remote.expo,
+                    buttonAssignments = event.buttonAssignments.ifEmpty { state.remote.buttonAssignments },
+                    gimbalWheelReversed = event.gimbalWheelReversed ?: state.remote.gimbalWheelReversed,
+                    throttleInput = event.throttleInput ?: state.remote.throttleInput,
+                    yawInput = event.yawInput ?: state.remote.yawInput,
+                    pitchInput = event.pitchInput ?: state.remote.pitchInput,
+                    rollInput = event.rollInput ?: state.remote.rollInput,
+                    gimbalWheelInput = event.gimbalWheelInput ?: state.remote.gimbalWheelInput,
                     opaqueControlMenu = event.opaqueControlMenu ?: state.remote.opaqueControlMenu
                 )
             )

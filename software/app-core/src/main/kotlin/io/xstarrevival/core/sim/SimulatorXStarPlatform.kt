@@ -186,6 +186,31 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun configureController(
+        stickMode: Int,
+        sensitivity: Double,
+        deadZone: Double,
+        expo: Double,
+        buttonAssignments: Map<String, String>,
+        gimbalWheelReversed: Boolean
+    ) {
+        snapshot = SimulatorFlightModel.configureController(
+            snapshot,
+            stickMode,
+            sensitivity,
+            deadZone,
+            expo,
+            buttonAssignments,
+            gimbalWheelReversed
+        )
+        publish()
+    }
+
+    fun calibrateController() {
+        snapshot = SimulatorFlightModel.calibrateController(snapshot)
+        publish()
+    }
+
     fun startMission(plan: MissionPlan): Boolean {
         if (missionRuntime?.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) return false
         if (

@@ -12,11 +12,13 @@ import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CancelReturnToHomeCommand
 import io.xstarrevival.core.command.CalibrateGimbalCommand
+import io.xstarrevival.core.command.CalibrateControllerCommand
 import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.ConfigureCameraCommand
 import io.xstarrevival.core.command.ConfigureGimbalCommand
+import io.xstarrevival.core.command.ConfigureControllerCommand
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.LandCommand
 import io.xstarrevival.core.command.PauseMissionCommand
@@ -376,6 +378,32 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) {
             simulatorCommands.dispatch(SetVideoLinkChannelCommand(automatic, channel))
         }
+    }
+
+    fun configureSimulatorController(
+        stickMode: Int,
+        sensitivity: Double,
+        deadZone: Double,
+        expo: Double,
+        buttonAssignments: Map<String, String>,
+        gimbalWheelReversed: Boolean
+    ) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(
+                ConfigureControllerCommand(
+                    stickMode,
+                    sensitivity,
+                    deadZone,
+                    expo,
+                    buttonAssignments,
+                    gimbalWheelReversed
+                )
+            )
+        }
+    }
+
+    fun calibrateSimulatorController() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(CalibrateControllerCommand)
     }
 
     fun startBenchCapture() {
