@@ -4,6 +4,7 @@ import io.xstarrevival.core.model.BatteryState
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.Severity
 import io.xstarrevival.core.model.XStarState
+import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.asin
@@ -202,15 +203,18 @@ enum class BatteryHealthBand { EXCELLENT, GOOD, FAIR, POOR, UNKNOWN }
 data class BatteryHealthAssessment(
     val healthPercent: Int?,
     val cellDeltaV: Double?,
+    val powerW: Double?,
+    val estimatedRemainingFlightMinutes: Double?,
     val band: BatteryHealthBand,
     val advisories: List<String>
 )
 
 object BatteryHealthAnalyzer {
-    fun assess(battery: BatteryState): BatteryHealthAssessment {
+    fun assess(battery: BatteryState, ratedCapacityMah: Int? = null): BatteryHealthAssessment {
         val advisories = mutableListOf<String>()
-        val capacityHealth = if ((battery.designCapacityMah ?: 0) > 0 && battery.fullCapacityMah != null) {
-            ((battery.fullCapacityMah.toDouble() / battery.designCapacityMah!!.toDouble()) * 100.0).toInt().coerceIn(0, 120)
+        val referenceCapacity = ratedCapacityMah?.takeIf { it > 0 } ?: battery.designCapacityMah
+        val capacityHealth = if ((referenceCapacity ?: 0) > 0 && battery.fullCapacityMah != null) {
+            ((battery.fullCapacityMah.toDouble() / referenceCapacity!!.toDouble()) * 100.0).toInt().coerceIn(0, 120)
         } else null
         val delta = battery.cellDeltaV
         if (delta != null) {
@@ -226,6 +230,13 @@ object BatteryHealthAnalyzer {
             else if (temp <= 0.0) advisories += "Battery is too cold for normal performance"
         }
         battery.dischargeCount?.let { cycles -> if (cycles >= 200) advisories += "High cycle count" }
+        if (capacityHealth != null && capacityHealth < 75) advisories += "Usable capacity is below 75% of the rated profile"
+
+        val estimatedMinutes = battery.remainingCapacityMah?.let { remainingMah ->
+            battery.currentA?.let { currentA ->
+                currentA.absoluteValue.takeIf { it >= .1 }?.let { amps -> remainingMah / 1_000.0 / amps * 60.0 }
+            }
+        }
 
         val band = when {
             capacityHealth == null -> BatteryHealthBand.UNKNOWN
@@ -234,7 +245,7 @@ object BatteryHealthAnalyzer {
             capacityHealth >= 75 -> BatteryHealthBand.FAIR
             else -> BatteryHealthBand.POOR
         }
-        return BatteryHealthAssessment(capacityHealth, delta, band, advisories)
+        return BatteryHealthAssessment(capacityHealth, delta, battery.powerW, estimatedMinutes, band, advisories)
     }
 }
 

@@ -40,6 +40,7 @@ class SanitizedTelemetryCaptureWriterTest {
                     throttleInput = .25,
                     opaqueControlMenu = listOf(999_991, 999_992)
                 ),
+                battery = io.xstarrevival.core.model.BatteryState(packId = "PRIVATE-BATTERY-ID"),
                 imageLink = ImageLinkState(
                     automaticChannel = false,
                     channel = 6,
@@ -74,6 +75,7 @@ class SanitizedTelemetryCaptureWriterTest {
         assertFalse(capture.contains("999991"))
         assertFalse(capture.contains("PRIVATE-SERIAL"))
         assertFalse(capture.contains("PRIVATE-APP-KEY"))
+        assertFalse(capture.contains("PRIVATE-BATTERY-ID"))
         assertFalse(capture.contains("latitude"))
         assertFalse(capture.contains("longitude"))
         assertFalse(capture.contains("opaque_control_menu"))

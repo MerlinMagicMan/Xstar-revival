@@ -313,12 +313,16 @@ object SimulatorFlightModel {
                 flightMode = snapshot.phase.name.replace('_', ' ')
             ),
             battery = BatteryState(
+                packId = "SIM-XSTAR-BATTERY-001",
                 percent = battery,
+                designCapacityMah = 4900,
                 packVoltageV = cellVoltage * 4,
                 currentA = if (armed) 8.0 + snapshot.groundSpeedMps else 0.4,
                 temperatureC = 27.0 + if (armed) 4.0 else 0.0,
-                fullCapacityMah = 4900,
-                remainingCapacityMah = (4900 * snapshot.batteryPercent / 100.0).toInt(),
+                fullCapacityMah = 4700,
+                remainingCapacityMah = (4700 * snapshot.batteryPercent / 100.0).toInt(),
+                dischargeCount = 41,
+                firmwareVersion = "sim-bms-1",
                 cells = List(4) { CellState(it + 1, cellVoltage + (it - 1.5) * 0.001) }
             ),
             navigation = NavigationState(

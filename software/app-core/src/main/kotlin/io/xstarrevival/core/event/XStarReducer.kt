@@ -24,6 +24,7 @@ object XStarReducer {
             )
             is XStarEvent.BatterySnapshot -> state.copy(
                 battery = state.battery.copy(
+                    packId = event.packId ?: state.battery.packId,
                     percent = event.percent ?: state.battery.percent,
                     packVoltageV = event.packVoltageV ?: state.battery.packVoltageV,
                     currentA = event.currentA ?: state.battery.currentA,
