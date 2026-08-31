@@ -1,6 +1,5 @@
 package io.xstarrevival.app.gs
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -226,7 +224,43 @@ private fun MissionEditor(
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.weight(.58f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxSize()) {
-                MissionPathCanvas(draft)
+                val aircraftPoint = state.navigation.latitudeDeg?.let { latitude ->
+                    state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+                }
+                val homePoint = state.navigation.homeLatitudeDeg?.let { latitude ->
+                    state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+                }
+                GsOperationalMap(
+                    modifier = Modifier.fillMaxSize(),
+                    aircraft = aircraftPoint,
+                    aircraftHeadingDeg = state.attitude.yawDeg,
+                    home = homePoint,
+                    flightPath = listOfNotNull(aircraftPoint),
+                    missionWaypoints = draft.waypoints.map { it.position },
+                    selectedWaypointIndex = selectedWaypoint,
+                    fitKey = listOf(
+                        draft.waypoints.map { it.position },
+                        aircraftPoint != null,
+                        homePoint != null
+                    ),
+                    label = "MISSION MAP · TAP TO PLACE",
+                    onMapTap = { position ->
+                        val index = selectedWaypoint
+                        if (index != null && index in draft.waypoints.indices) {
+                            draft = draft.copy(waypoints = draft.waypoints.toMutableList().also {
+                                it[index] = it[index].copy(position = position)
+                            })
+                        } else {
+                            draft = draft.copy(waypoints = draft.waypoints + MissionWaypoint(
+                                id = UUID.randomUUID().toString(),
+                                position = position,
+                                altitudeM = 45.0,
+                                speedMps = 5.0
+                            ))
+                            selectedWaypoint = draft.waypoints.lastIndex
+                        }
+                    }
+                )
                 Column(Modifier.align(Alignment.TopStart).padding(16.dp).width(250.dp)) {
                     TextField(
                         value = draft.name,
@@ -431,31 +465,6 @@ private fun WaypointInspector(wp: MissionWaypoint, onChange: (MissionWaypoint) -
 }
 
 @Composable
-private fun MissionPathCanvas(plan: MissionPlan) {
-    Canvas(Modifier.fillMaxSize().padding(18.dp)) {
-        val grid = Color.White.copy(alpha=.055f)
-        repeat(10) { i -> drawLine(grid, Offset(size.width*i/9f,0f), Offset(size.width*i/9f,size.height),1f) }
-        repeat(8) { i -> drawLine(grid, Offset(0f,size.height*i/7f), Offset(size.width,size.height*i/7f),1f) }
-        if (plan.waypoints.isEmpty()) return@Canvas
-        val lats = plan.waypoints.map { it.position.latitudeDeg }
-        val lons = plan.waypoints.map { it.position.longitudeDeg }
-        val minLat = lats.minOrNull()!!; val maxLat = lats.maxOrNull()!!
-        val minLon = lons.minOrNull()!!; val maxLon = lons.maxOrNull()!!
-        val latSpan = (maxLat-minLat).takeIf { it > 1e-7 } ?: 1e-7
-        val lonSpan = (maxLon-minLon).takeIf { it > 1e-7 } ?: 1e-7
-        val pts = plan.waypoints.map { wp ->
-            val x = ((wp.position.longitudeDeg-minLon)/lonSpan).toFloat()
-            val y = (1.0-(wp.position.latitudeDeg-minLat)/latSpan).toFloat()
-            Offset(48f+x*(size.width-96f), 72f+y*(size.height-144f))
-        }
-        pts.zipWithNext().forEach { (a,b) -> drawLine(GsColors.Orange,a,b,4f) }
-        pts.forEachIndexed { index,p ->
-            drawCircle(GsColors.Orange,12f,p); drawCircle(Color.White,4f,p)
-        }
-    }
-}
-
-@Composable
 private fun OrbitEditor(
     state: XStarState,
     source: TelemetrySource,
@@ -470,8 +479,15 @@ private fun OrbitEditor(
     var laps by remember { mutableFloatStateOf(1f) }
     var clockwise by remember { mutableStateOf(true) }
     var reviewOpen by remember { mutableStateOf(false) }
-    val point = state.navigation.latitudeDeg?.let { latitude ->
+    val aircraftPoint = state.navigation.latitudeDeg?.let { latitude ->
         state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+    }
+    val homePoint = state.navigation.homeLatitudeDeg?.let { latitude ->
+        state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+    }
+    var point by remember { mutableStateOf<GeoPoint?>(null) }
+    LaunchedEffect(aircraftPoint) {
+        if (point == null) point = aircraftPoint
     }
     val active = execution.mode == SmartFlightMode.ORBIT && execution.phase == SmartFlightPhase.ACTIVE
     val canStart = source == TelemetrySource.SIMULATOR && state.aircraft.armed == true &&
@@ -495,19 +511,28 @@ private fun OrbitEditor(
             if (source != TelemetrySource.SIMULATOR) Text("Orbit execution is simulator-only.", color = GsColors.Muted, fontSize = 9.sp)
         }
         Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
-            Canvas(Modifier.fillMaxSize()) {
-                val c = Offset(size.width/2,size.height/2); val r = size.minDimension*.30f
-                drawCircle(GsColors.Orange.copy(alpha=.12f),r,c); drawCircle(GsColors.Orange,r,c,style=androidx.compose.ui.graphics.drawscope.Stroke(4f)); drawCircle(Color.White,8f,c); drawCircle(GsColors.Orange,12f,Offset(c.x+r,c.y))
-            }
+            GsOperationalMap(
+                modifier = Modifier.fillMaxSize(),
+                aircraft = aircraftPoint,
+                aircraftHeadingDeg = state.attitude.yawDeg,
+                home = homePoint,
+                operator = homePoint,
+                pointOfInterest = point,
+                orbitRadiusM = radius.toDouble(),
+                fitKey = listOf(aircraftPoint != null, homePoint != null),
+                label = "ORBIT MAP · TAP POI",
+                onMapTap = { point = it }
+            )
         }
     }
-    if (reviewOpen && point != null) {
+    val reviewPoint = point
+    if (reviewOpen && reviewPoint != null) {
         AlertDialog(
             onDismissRequest = { reviewOpen = false },
             title = { Text("REVIEW ORBIT") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    GsSettingLine("Point of interest", "%.5f, %.5f".format(point.latitudeDeg, point.longitudeDeg))
+                    GsSettingLine("Point of interest", "%.5f, %.5f".format(reviewPoint.latitudeDeg, reviewPoint.longitudeDeg))
                     GsSettingLine("Radius / altitude", "${radius.toInt()} m / ${altitude.toInt()} m")
                     GsSettingLine("Speed", "%.1f m/s".format(speed))
                     GsSettingLine("Direction", if (clockwise) "Clockwise" else "Counter-clockwise")
@@ -517,7 +542,7 @@ private fun OrbitEditor(
             dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
             confirmButton = {
                 Button(onClick = {
-                    onStart(point, radius.toDouble(), altitude.toDouble(), speed.toDouble(), clockwise, laps.toInt())
+                    onStart(reviewPoint, radius.toDouble(), altitude.toDouble(), speed.toDouble(), clockwise, laps.toInt())
                     reviewOpen = false
                 }) { Text("START ORBIT") }
             }
