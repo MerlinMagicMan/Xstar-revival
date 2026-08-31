@@ -119,7 +119,11 @@ fun GsGarageScreen(
 
 @Composable
 private fun QuickLaunch(title: String, subtitle: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier, onClick = onClick, colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = GsColors.Panel)
+    ) {
         Column(Modifier.padding(16.dp)) {
             Text(title, color = GsColors.White, fontWeight = FontWeight.Bold)
             Text(subtitle, color = GsColors.Muted, fontSize = 11.sp)
