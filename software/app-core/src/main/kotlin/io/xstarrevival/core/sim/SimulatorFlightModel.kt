@@ -8,6 +8,7 @@ import io.xstarrevival.core.model.CellState
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.DiagnosticsState
 import io.xstarrevival.core.model.GimbalState
+import io.xstarrevival.core.model.ImageLinkState
 import io.xstarrevival.core.model.NavigationState
 import io.xstarrevival.core.model.RemoteState
 import io.xstarrevival.core.model.VideoState
@@ -69,6 +70,8 @@ data class SimulatorSnapshot(
     val overexposureWarningEnabled: Boolean = false,
     val gridEnabled: Boolean = false,
     val centerPointEnabled: Boolean = false,
+    val videoChannelAutomatic: Boolean = true,
+    val videoChannel: Int = 7,
     val elapsedSeconds: Double = 0.0
 )
 
@@ -169,6 +172,15 @@ object SimulatorFlightModel {
         gimbalPitchSpeed = pitchSpeed,
         gimbalStatus = "READY"
     )
+
+    fun setVideoLinkChannel(snapshot: SimulatorSnapshot, automatic: Boolean, channel: Int?): SimulatorSnapshot {
+        val selected = if (automatic) {
+            simulatorChannelStrengths.indices.maxBy { simulatorChannelStrengths[it] } + 1
+        } else {
+            channel ?: snapshot.videoChannel
+        }
+        return snapshot.copy(videoChannelAutomatic = automatic, videoChannel = selected.coerceIn(1, 13))
+    }
 
     fun step(
         snapshot: SimulatorSnapshot,
@@ -329,6 +341,18 @@ object SimulatorFlightModel {
                 pitchSpeed = snapshot.gimbalPitchSpeed,
                 calibrated = snapshot.gimbalCalibrated
             ),
+            imageLink = ImageLinkState(
+                usbEnabled = true,
+                rfFrequencyHz = 902_000_000.0 + snapshot.videoChannel * 2_000_000.0,
+                rfSignalValue = simulatorChannelStrengths[snapshot.videoChannel - 1],
+                automaticChannel = snapshot.videoChannelAutomatic,
+                channel = snapshot.videoChannel,
+                channelStrengths = simulatorChannelStrengths,
+                interferencePercent = 100 - simulatorChannelStrengths[snapshot.videoChannel - 1],
+                packetLossPercent = 0.4,
+                latencyMs = 42,
+                bandwidthMbps = 8.6
+            ),
             diagnostics = DiagnosticsState(
                 source = "local-simulator",
                 counters = mapOf("sim_steps" to (snapshot.elapsedSeconds * 20.0).toLong()),
@@ -344,4 +368,6 @@ object SimulatorFlightModel {
     }
 
     private fun normalizeHeading(value: Double): Double = (value % 360.0 + 360.0) % 360.0
+
+    private val simulatorChannelStrengths = listOf(28, 44, 36, 62, 51, 73, 88, 66, 49, 58, 41, 69, 33)
 }

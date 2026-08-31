@@ -158,6 +158,23 @@ class CommandSafetyValidatorTest {
     }
 
     @Test
+    fun `manual video channel changes are blocked while airborne`() {
+        val airborne = healthyState().copy(
+            aircraft = AircraftState(armed = true, flightMode = "FLYING"),
+            navigation = healthyState().navigation.copy(altitudeM = 20.0)
+        )
+
+        val result = validator.validate(
+            SetVideoLinkChannelCommand(automatic = false, channel = 6),
+            airborne,
+            setOf(CommandKind.SET_VIDEO_LINK_CHANNEL)
+        )
+
+        assertFalse(result.canDispatch)
+        assertTrue(result.issues.any { it.message.contains("airborne") })
+    }
+
+    @Test
     fun `emergency landing remains available during conflicts and critical warnings`() {
         val airborne = healthyState().copy(
             aircraft = AircraftState(armed = true, flightMode = "FLYING"),

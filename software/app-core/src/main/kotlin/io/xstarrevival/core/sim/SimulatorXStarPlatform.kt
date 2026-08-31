@@ -181,6 +181,11 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun setVideoLinkChannel(automatic: Boolean, channel: Int?) {
+        snapshot = SimulatorFlightModel.setVideoLinkChannel(snapshot, automatic, channel)
+        publish()
+    }
+
     fun startMission(plan: MissionPlan): Boolean {
         if (missionRuntime?.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) return false
         if (

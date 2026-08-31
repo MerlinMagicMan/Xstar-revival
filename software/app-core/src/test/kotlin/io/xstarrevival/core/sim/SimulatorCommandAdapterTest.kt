@@ -10,6 +10,7 @@ import io.xstarrevival.core.command.ConfigureGimbalCommand
 import io.xstarrevival.core.command.RecenterGimbalCommand
 import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
+import io.xstarrevival.core.command.SetVideoLinkChannelCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakePhotoCommand
@@ -99,6 +100,30 @@ class SimulatorCommandAdapterTest {
         assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(CalibrateGimbalCommand).phase)
         assertEquals("CALIBRATED", platform.state.value.gimbal.status)
         assertTrue(platform.state.value.gimbal.calibrated == true)
+
+        platform.disconnect()
+    }
+
+    @Test
+    fun `video link channel commands reconcile analyzer state`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+
+        assertEquals(
+            CommandPhase.COMPLETED,
+            dispatcher.dispatchAndAwait(SetVideoLinkChannelCommand(automatic = false, channel = 3)).phase
+        )
+        assertEquals(false, platform.state.value.imageLink.automaticChannel)
+        assertEquals(3, platform.state.value.imageLink.channel)
+        assertEquals(13, platform.state.value.imageLink.channelStrengths.size)
+        assertEquals(
+            CommandPhase.COMPLETED,
+            dispatcher.dispatchAndAwait(SetVideoLinkChannelCommand(automatic = true, channel = null)).phase
+        )
+        assertEquals(true, platform.state.value.imageLink.automaticChannel)
+        assertEquals(7, platform.state.value.imageLink.channel)
+        assertTrue((platform.state.value.imageLink.bandwidthMbps ?: 0.0) > 0.0)
 
         platform.disconnect()
     }

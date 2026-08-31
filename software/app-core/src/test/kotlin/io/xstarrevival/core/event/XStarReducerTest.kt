@@ -111,4 +111,28 @@ class XStarReducerTest {
         assertTrue(state.gimbal.calibrated == true)
     }
 
+    @Test
+    fun imageLinkSnapshotNormalizesAnalyzerMetrics() {
+        val state = XStarReducer.reduce(
+            XStarState(),
+            XStarEvent.ImageLinkSnapshot(
+                automaticChannel = false,
+                channel = 4,
+                channelStrengths = listOf(20, 30, 40, 80),
+                interferencePercent = 20,
+                packetLossPercent = 1.2,
+                latencyMs = 55,
+                bandwidthMbps = 7.4
+            ),
+            1L
+        )
+
+        assertEquals(false, state.imageLink.automaticChannel)
+        assertEquals(4, state.imageLink.channel)
+        assertEquals(80, state.imageLink.channelStrengths.last())
+        assertEquals(1.2, state.imageLink.packetLossPercent)
+        assertEquals(55, state.imageLink.latencyMs)
+        assertEquals(7.4, state.imageLink.bandwidthMbps)
+    }
+
 }
