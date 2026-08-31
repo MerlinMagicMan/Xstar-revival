@@ -59,4 +59,34 @@ class XStarReducerTest {
         assertEquals(2.2, state.navigation.ultrasonicHeightM)
     }
 
+    @Test
+    fun cameraSnapshotNormalizesProductionSettings() {
+        val state = XStarReducer.reduce(
+            XStarState(),
+            XStarEvent.CameraSnapshot(
+                connected = true,
+                mode = "VIDEO",
+                exposureMode = "MANUAL",
+                iso = "400",
+                shutter = "0.004",
+                exposureCompensationEv = -.7,
+                whiteBalance = "CLOUDY",
+                photoResolution = "12 MP",
+                videoResolution = "4K",
+                frameRateFps = 30,
+                timerSeconds = 5,
+                storageRemainingMb = 24_000L
+            ),
+            1L
+        )
+
+        assertEquals("MANUAL", state.camera.exposureMode)
+        assertEquals("400", state.camera.iso)
+        assertEquals(-.7, state.camera.exposureCompensationEv)
+        assertEquals("CLOUDY", state.camera.whiteBalance)
+        assertEquals("4K", state.camera.videoResolution)
+        assertEquals(30, state.camera.frameRateFps)
+        assertEquals(24_000L, state.camera.storageRemainingMb)
+    }
+
 }

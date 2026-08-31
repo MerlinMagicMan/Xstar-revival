@@ -56,7 +56,14 @@ sealed interface XStarEvent {
         val recording: Boolean? = null,
         val exposureMode: String? = null,
         val iso: String? = null,
-        val shutter: String? = null
+        val shutter: String? = null,
+        val exposureCompensationEv: Double? = null,
+        val whiteBalance: String? = null,
+        val photoResolution: String? = null,
+        val videoResolution: String? = null,
+        val frameRateFps: Int? = null,
+        val timerSeconds: Int? = null,
+        val storageRemainingMb: Long? = null
     ) : XStarEvent
 
     data class GimbalSnapshot(val pitchDeg: Double? = null, val status: String? = null) : XStarEvent

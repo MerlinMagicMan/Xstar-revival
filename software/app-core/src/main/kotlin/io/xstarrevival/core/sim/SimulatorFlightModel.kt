@@ -50,6 +50,20 @@ data class SimulatorSnapshot(
     val gimbalPitchDeg: Double = -15.0,
     val batteryPercent: Double = 88.0,
     val recording: Boolean = false,
+    val cameraMode: String = "VIDEO",
+    val cameraIso: Int? = null,
+    val cameraShutterSeconds: Double? = null,
+    val cameraExposureCompensationEv: Double = 0.0,
+    val cameraWhiteBalance: String = "AUTO",
+    val cameraPhotoResolution: String = "12 MP",
+    val cameraVideoResolution: String = "4K",
+    val cameraFrameRateFps: Int = 30,
+    val cameraTimerSeconds: Int = 0,
+    val photosTaken: Int = 0,
+    val histogramEnabled: Boolean = false,
+    val overexposureWarningEnabled: Boolean = false,
+    val gridEnabled: Boolean = false,
+    val centerPointEnabled: Boolean = false,
     val elapsedSeconds: Double = 0.0
 )
 
@@ -99,6 +113,36 @@ object SimulatorFlightModel {
 
     fun setRecording(snapshot: SimulatorSnapshot, recording: Boolean): SimulatorSnapshot =
         snapshot.copy(recording = recording)
+
+    fun takePhoto(snapshot: SimulatorSnapshot): SimulatorSnapshot =
+        snapshot.copy(photosTaken = snapshot.photosTaken + 1)
+
+    fun setCameraMode(snapshot: SimulatorSnapshot, mode: String): SimulatorSnapshot =
+        snapshot.copy(cameraMode = mode.uppercase())
+
+    fun setExposure(
+        snapshot: SimulatorSnapshot,
+        iso: Int?,
+        shutterSeconds: Double?,
+        compensationEv: Double?
+    ): SimulatorSnapshot = snapshot.copy(
+        cameraIso = iso,
+        cameraShutterSeconds = shutterSeconds,
+        cameraExposureCompensationEv = compensationEv ?: snapshot.cameraExposureCompensationEv
+    )
+
+    fun configureCamera(snapshot: SimulatorSnapshot, parameters: Map<String, String>): SimulatorSnapshot = snapshot.copy(
+        cameraWhiteBalance = parameters["white_balance"] ?: snapshot.cameraWhiteBalance,
+        cameraPhotoResolution = parameters["photo_resolution"] ?: snapshot.cameraPhotoResolution,
+        cameraVideoResolution = parameters["video_resolution"] ?: snapshot.cameraVideoResolution,
+        cameraFrameRateFps = parameters["frame_rate"]?.toIntOrNull() ?: snapshot.cameraFrameRateFps,
+        cameraTimerSeconds = parameters["timer_seconds"]?.toIntOrNull() ?: snapshot.cameraTimerSeconds,
+        histogramEnabled = parameters["histogram"]?.toBooleanStrictOrNull() ?: snapshot.histogramEnabled,
+        overexposureWarningEnabled = parameters["overexposure_warning"]?.toBooleanStrictOrNull()
+            ?: snapshot.overexposureWarningEnabled,
+        gridEnabled = parameters["grid"]?.toBooleanStrictOrNull() ?: snapshot.gridEnabled,
+        centerPointEnabled = parameters["center_point"]?.toBooleanStrictOrNull() ?: snapshot.centerPointEnabled
+    )
 
     fun setGimbalPitch(snapshot: SimulatorSnapshot, pitchDeg: Double): SimulatorSnapshot =
         snapshot.copy(gimbalPitchDeg = pitchDeg.coerceIn(-90.0, 30.0))
@@ -222,9 +266,37 @@ object SimulatorFlightModel {
             remote = RemoteState(connected = true, signalPercent = 100, batteryPercent = 100, imageSignalPercent = 100),
             camera = CameraState(
                 connected = true,
-                mode = "VIDEO",
+                mode = snapshot.cameraMode,
                 recording = snapshot.recording,
-                video = VideoState(receiving = true, codec = "SYNTHETIC")
+                exposureMode = if (snapshot.cameraIso == null && snapshot.cameraShutterSeconds == null) "AUTO" else "MANUAL",
+                iso = snapshot.cameraIso?.toString() ?: "AUTO",
+                shutter = snapshot.cameraShutterSeconds?.toString() ?: "AUTO",
+                exposureCompensationEv = snapshot.cameraExposureCompensationEv,
+                whiteBalance = snapshot.cameraWhiteBalance,
+                photoResolution = snapshot.cameraPhotoResolution,
+                videoResolution = snapshot.cameraVideoResolution,
+                frameRateFps = snapshot.cameraFrameRateFps,
+                timerSeconds = snapshot.cameraTimerSeconds,
+                storageRemainingMb = (29_696L - snapshot.photosTaken * 8L).coerceAtLeast(0L),
+                photosTaken = snapshot.photosTaken,
+                histogramEnabled = snapshot.histogramEnabled,
+                overexposureWarningEnabled = snapshot.overexposureWarningEnabled,
+                gridEnabled = snapshot.gridEnabled,
+                centerPointEnabled = snapshot.centerPointEnabled,
+                video = VideoState(
+                    receiving = true,
+                    codec = "SYNTHETIC",
+                    width = when (snapshot.cameraVideoResolution) {
+                        "4K" -> 3840
+                        "2.7K" -> 2704
+                        else -> 1920
+                    },
+                    height = when (snapshot.cameraVideoResolution) {
+                        "4K" -> 2160
+                        "2.7K" -> 1520
+                        else -> 1080
+                    }
+                )
             ),
             gimbal = GimbalState(pitchDeg = snapshot.gimbalPitchDeg, status = "SIMULATED"),
             diagnostics = DiagnosticsState(

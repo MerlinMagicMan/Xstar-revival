@@ -85,6 +85,18 @@ data class CameraState(
     val exposureMode: String? = null,
     val iso: String? = null,
     val shutter: String? = null,
+    val exposureCompensationEv: Double? = null,
+    val whiteBalance: String? = null,
+    val photoResolution: String? = null,
+    val videoResolution: String? = null,
+    val frameRateFps: Int? = null,
+    val timerSeconds: Int? = null,
+    val storageRemainingMb: Long? = null,
+    val photosTaken: Int = 0,
+    val histogramEnabled: Boolean = false,
+    val overexposureWarningEnabled: Boolean = false,
+    val gridEnabled: Boolean = false,
+    val centerPointEnabled: Boolean = false,
     val video: VideoState = VideoState()
 )
 
