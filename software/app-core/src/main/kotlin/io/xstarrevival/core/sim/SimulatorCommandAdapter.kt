@@ -1,6 +1,7 @@
 package io.xstarrevival.core.sim
 
 import io.xstarrevival.core.command.ArmCommand
+import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CommandAcknowledgement
 import io.xstarrevival.core.command.CommandCompletion
 import io.xstarrevival.core.command.CommandKind
@@ -9,12 +10,16 @@ import io.xstarrevival.core.command.CommandTransport
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.EmergencyLandCommand
 import io.xstarrevival.core.command.LandCommand
+import io.xstarrevival.core.command.PauseMissionCommand
 import io.xstarrevival.core.command.RecenterGimbalCommand
+import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
 import io.xstarrevival.core.command.StartRecordingCommand
+import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakePhotoCommand
 import io.xstarrevival.core.command.TakeoffCommand
+import io.xstarrevival.core.groundstation.MissionExecutionPhase
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import kotlinx.coroutines.flow.first
@@ -34,7 +39,11 @@ class SimulatorCommandAdapter(
         CommandKind.START_RECORDING,
         CommandKind.STOP_RECORDING,
         CommandKind.SET_GIMBAL_PITCH,
-        CommandKind.RECENTER_GIMBAL
+        CommandKind.RECENTER_GIMBAL,
+        CommandKind.START_WAYPOINT_MISSION,
+        CommandKind.PAUSE_MISSION,
+        CommandKind.RESUME_MISSION,
+        CommandKind.ABORT_MISSION
     )
 
     override suspend fun send(request: CommandRequest): CommandAcknowledgement {
@@ -48,6 +57,18 @@ class SimulatorCommandAdapter(
             StopRecordingCommand -> platform.setRecording(false)
             is SetGimbalPitchCommand -> platform.setGimbalPitch(command.pitchDeg)
             RecenterGimbalCommand -> platform.setGimbalPitch(0.0)
+            is StartWaypointMissionCommand -> if (!platform.startMission(command.mission)) {
+                return CommandAcknowledgement.Rejected("Simulator could not start the mission")
+            }
+            PauseMissionCommand -> if (!platform.pauseMission()) {
+                return CommandAcknowledgement.Rejected("No active simulator mission can be paused")
+            }
+            ResumeMissionCommand -> if (!platform.resumeMission()) {
+                return CommandAcknowledgement.Rejected("No paused simulator mission can be resumed")
+            }
+            AbortMissionCommand -> if (!platform.abortMission()) {
+                return CommandAcknowledgement.Rejected("No active simulator mission can be aborted")
+            }
             else -> return CommandAcknowledgement.Unsupported("${command.kind} is not implemented by the simulator")
         }
         return CommandAcknowledgement.Accepted("Simulator accepted ${request.command.kind}")
@@ -69,6 +90,10 @@ class SimulatorCommandAdapter(
                 it.gimbal.pitchDeg?.let { pitch -> kotlin.math.abs(pitch) < 0.01 } == true
             }
             TakePhotoCommand -> CommandCompletion.Completed("Simulator state reconciled for ${command.kind}")
+            is StartWaypointMissionCommand -> awaitMissionTerminal()
+            PauseMissionCommand -> awaitMissionPhase(MissionExecutionPhase.PAUSED)
+            ResumeMissionCommand -> awaitMissionPhase(MissionExecutionPhase.ACTIVE)
+            AbortMissionCommand -> awaitMissionPhase(MissionExecutionPhase.ABORTED)
             else -> CommandCompletion.Failed("${command.kind} has no simulator completion rule")
         }
     }
@@ -91,7 +116,30 @@ class SimulatorCommandAdapter(
         return CommandCompletion.Completed("Simulator state reconciled for ${request.command.kind}")
     }
 
+    private suspend fun awaitMissionPhase(phase: MissionExecutionPhase): CommandCompletion {
+        val state = platform.missionExecution.first { it.phase == phase || it.phase in MISSION_TERMINAL_PHASES }
+        return when {
+            state.phase == phase -> CommandCompletion.Completed(state.detail)
+            state.phase == MissionExecutionPhase.ABORTED -> CommandCompletion.Cancelled(state.detail)
+            else -> CommandCompletion.Failed(state.detail ?: "Mission entered ${state.phase}")
+        }
+    }
+
+    private suspend fun awaitMissionTerminal(): CommandCompletion {
+        val state = platform.missionExecution.first { it.phase in MISSION_TERMINAL_PHASES }
+        return when (state.phase) {
+            MissionExecutionPhase.COMPLETED -> CommandCompletion.Completed(state.detail)
+            MissionExecutionPhase.ABORTED -> CommandCompletion.Cancelled(state.detail)
+            else -> CommandCompletion.Failed(state.detail ?: "Mission failed")
+        }
+    }
+
     private companion object {
         val FLIGHT_START_COMMANDS = setOf(CommandKind.ARM, CommandKind.TAKEOFF)
+        val MISSION_TERMINAL_PHASES = setOf(
+            MissionExecutionPhase.COMPLETED,
+            MissionExecutionPhase.ABORTED,
+            MissionExecutionPhase.FAILED
+        )
     }
 }

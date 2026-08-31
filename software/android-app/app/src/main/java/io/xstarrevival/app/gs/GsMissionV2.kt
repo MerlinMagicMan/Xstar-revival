@@ -18,12 +18,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -39,15 +41,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.xstarrevival.core.groundstation.GeoPoint
+import io.xstarrevival.app.TelemetrySource
+import io.xstarrevival.core.command.CommandStatus
+import io.xstarrevival.core.groundstation.MissionExecutionPhase
+import io.xstarrevival.core.groundstation.MissionExecutionState
+import io.xstarrevival.core.groundstation.MissionFinishBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
+import io.xstarrevival.core.groundstation.MissionReviewAnalyzer
 import io.xstarrevival.core.groundstation.MissionValidator
 import io.xstarrevival.core.groundstation.MissionWaypoint
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.sim.SimulatorMissionModel
 import java.util.UUID
 
 @Composable
-fun GsMissionV2Screen(state: XStarState) {
+fun GsMissionV2Screen(
+    state: XStarState,
+    source: TelemetrySource,
+    execution: MissionExecutionState,
+    commandStatus: CommandStatus?,
+    onStart: (MissionPlan) -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onAbort: () -> Unit
+) {
     val context = LocalContext.current
     val store = remember(context) { GsMissionStore(context.applicationContext) }
     var plans by remember { mutableStateOf(store.load()) }
@@ -80,6 +98,13 @@ fun GsMissionV2Screen(state: XStarState) {
                 },
                 onSave = { plan -> store.save(plan); plans = store.load(); active = plan },
                 onDelete = { plan -> store.delete(plan.id); plans = store.load(); active = plans.firstOrNull() },
+                source = source,
+                execution = execution,
+                commandStatus = commandStatus,
+                onStart = onStart,
+                onPause = onPause,
+                onResume = onResume,
+                onAbort = onAbort,
                 modifier = Modifier.weight(1f)
             )
             GsMissionMode.ORBIT -> OrbitEditor(state, Modifier.weight(1f))
@@ -97,6 +122,13 @@ private fun PersistentWaypointPlanner(
     onCreate: () -> Unit,
     onSave: (MissionPlan) -> Unit,
     onDelete: (MissionPlan) -> Unit,
+    source: TelemetrySource,
+    execution: MissionExecutionState,
+    commandStatus: CommandStatus?,
+    onStart: (MissionPlan) -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onAbort: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -122,7 +154,10 @@ private fun PersistentWaypointPlanner(
                 Text("Create a mission to begin planning", color = GsColors.Muted)
             }
         } else {
-            MissionEditor(state, active, onSave, onDelete, Modifier.weight(1f).fillMaxHeight())
+            MissionEditor(
+                state, active, onSave, onDelete, source, execution, commandStatus,
+                onStart, onPause, onResume, onAbort, Modifier.weight(1f).fillMaxHeight()
+            )
         }
     }
 }
@@ -133,11 +168,28 @@ private fun MissionEditor(
     original: MissionPlan,
     onSave: (MissionPlan) -> Unit,
     onDelete: (MissionPlan) -> Unit,
+    source: TelemetrySource,
+    execution: MissionExecutionState,
+    commandStatus: CommandStatus?,
+    onStart: (MissionPlan) -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onAbort: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var draft by remember(original.id, original.waypoints.size) { mutableStateOf(original) }
     var selectedWaypoint by remember(original.id) { mutableStateOf<Int?>(draft.waypoints.indices.firstOrNull()) }
+    var reviewOpen by remember { mutableStateOf(false) }
     val validation = MissionValidator.validate(draft, state.takeIf { it.connection is ConnectionState.Connected })
+    val review = MissionReviewAnalyzer.analyze(
+        plan = draft,
+        start = state.navigation.latitudeDeg?.let { latitude ->
+            state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+        },
+        currentBatteryPercent = state.battery.percent,
+        supportedActions = SimulatorMissionModel.supportedWaypointActions,
+        supportedFinishBehaviors = setOf(MissionFinishBehavior.HOVER, MissionFinishBehavior.LAND)
+    )
 
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.weight(.58f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(16.dp)) {
@@ -153,7 +205,10 @@ private fun MissionEditor(
                 }
                 Row(Modifier.align(Alignment.BottomCenter).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
-                        val base = draft.waypoints.lastOrNull()?.position ?: GeoPoint(35.515, -97.57)
+                        val base = draft.waypoints.lastOrNull()?.position ?: GeoPoint(
+                            state.navigation.latitudeDeg ?: 35.515,
+                            state.navigation.longitudeDeg ?: -97.57
+                        )
                         val n = draft.waypoints.size
                         val next = MissionWaypoint(
                             id = UUID.randomUUID().toString(),
@@ -205,14 +260,84 @@ private fun MissionEditor(
                     validation.issues.take(4).forEach { Text("• ${it.message}", color = GsColors.Muted, fontSize = 10.sp) }
                     Spacer(Modifier.height(6.dp))
                     Button(
-                        onClick = { },
-                        enabled = validation.canExecute && state.connection is ConnectionState.Connected,
+                        onClick = { reviewOpen = true },
+                        enabled = validation.canExecute && review.unsupportedActions.isEmpty() &&
+                            review.unsupportedFinishBehavior == null && source == TelemetrySource.SIMULATOR &&
+                            execution.phase !in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED),
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("REVIEW & START") }
-                    if (state.connection !is ConnectionState.Connected) Text("Connect aircraft to execute. Planning and saving remain available offline.", color = GsColors.Muted, fontSize = 9.sp)
+                    if (source != TelemetrySource.SIMULATOR) {
+                        Text("Execution is enabled only for the isolated simulator. Planning and saving remain available offline.", color = GsColors.Muted, fontSize = 9.sp)
+                    }
+                    if (execution.phase != MissionExecutionPhase.IDLE) {
+                        Spacer(Modifier.height(8.dp))
+                        MissionExecutionPanel(execution, commandStatus, state, onPause, onResume, onAbort)
+                    }
                 }
             }
         }
+    }
+
+    if (reviewOpen) {
+        AlertDialog(
+            onDismissRequest = { reviewOpen = false },
+            title = { Text("REVIEW MISSION") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GsSettingLine("Mission", draft.name)
+                    GsSettingLine("Waypoints", draft.waypoints.size.toString())
+                    GsSettingLine("Distance", "%.0f m".format(review.totalDistanceM))
+                    GsSettingLine("Estimated duration", "%.0f s".format(review.estimatedDurationSeconds))
+                    GsSettingLine("Maximum altitude", "${review.maximumAltitudeM.toInt()} m")
+                    GsSettingLine("Estimated battery use", "${review.estimatedBatteryUsePercent}% (simulated)")
+                    GsSettingLine("Projected battery", review.projectedBatteryPercent?.let { "$it%" } ?: "Unavailable")
+                    GsSettingLine("Projected reserve margin", review.projectedReservePercent?.let { "$it%" } ?: "Unavailable")
+                    GsSettingLine("Battery reserve", "${draft.minimumBatteryReservePercent}%")
+                    val home = state.navigation.homeLatitudeDeg?.let { latitude ->
+                        state.navigation.homeLongitudeDeg?.let { longitude -> "%.5f, %.5f".format(latitude, longitude) }
+                    } ?: "Unavailable"
+                    GsSettingLine("Home Point", home)
+                    if (review.unsupportedActions.isNotEmpty()) {
+                        Text("Unsupported actions: ${review.unsupportedActions.joinToString()}", color = GsColors.Red, fontSize = 10.sp)
+                    }
+                    review.unsupportedFinishBehavior?.let {
+                        Text("Unsupported finish behavior: $it", color = GsColors.Red, fontSize = 10.sp)
+                    }
+                    validation.issues.forEach { Text("• ${it.message}", color = GsColors.Amber, fontSize = 10.sp) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = { onSave(draft); onStart(draft); reviewOpen = false }) { Text("START MISSION") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun MissionExecutionPanel(
+    execution: MissionExecutionState,
+    commandStatus: CommandStatus?,
+    state: XStarState,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onAbort: () -> Unit
+) {
+    Text("EXECUTION · ${execution.phase}", color = GsColors.Orange, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+    GsSettingLine("Current / next", "${execution.currentWaypoint ?: "—"} / ${execution.nextWaypoint ?: "—"}")
+    GsSettingLine("Progress", "${(execution.progress * 100).toInt()}%")
+    GsSettingLine("Remaining", execution.remainingDistanceM?.let { "%.0f m".format(it) } ?: "—")
+    GsSettingLine("ETA", execution.etaSeconds?.let { "%.0f s".format(it) } ?: "—")
+    GsSettingLine("Battery / reserve", "${state.battery.percent ?: "—"}% / ${execution.minimumBatteryReservePercent ?: "—"}%")
+    GsSettingLine("Command", commandStatus?.phase?.name ?: "IDLE")
+    execution.detail?.let { Text(it, color = GsColors.Muted, fontSize = 9.sp) }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Button(onClick = onPause, enabled = execution.phase == MissionExecutionPhase.ACTIVE) { Text("PAUSE") }
+        Button(onClick = onResume, enabled = execution.phase == MissionExecutionPhase.PAUSED) { Text("RESUME") }
+        OutlinedButton(
+            onClick = onAbort,
+            enabled = execution.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)
+        ) { Text("ABORT") }
     }
 }
 

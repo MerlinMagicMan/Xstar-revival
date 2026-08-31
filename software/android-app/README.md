@@ -39,6 +39,12 @@ Home Point, weak/lost/recovered RC and video links, complete aircraft-link loss,
 imbalanced/degraded batteries, forced landing, and mission interruption states. Video loss is
 reported separately from aircraft disconnect, and returning to Normal Flight clears the overlay.
 
+The waypoint planner now has a simulator-only Review & Start flow. Review shows route distance,
+duration, maximum altitude, simulated battery use, projected reserve, Home Point, validation
+warnings, and unsupported actions. During execution it shows current/next waypoint, progress,
+remaining distance, ETA, battery/reserve, and command state, with dispatcher-backed Pause, Resume,
+and Abort controls. Live and replay sources remain planning-only.
+
 ## Build
 
 From this directory:

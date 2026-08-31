@@ -73,6 +73,20 @@ provide concrete pack, temperature, capacity, and cell values. Forced landing is
 that drives a model action. Every scenario is deterministic and remains isolated from all hardware
 adapters.
 
+## Simulator waypoint execution
+
+Validated waypoint plans can execute through the same command dispatcher. The deterministic
+mission model takes off, advances through coordinate/altitude targets at each configured speed,
+honors hover delays, applies supported camera/gimbal/heading actions, and implements pause, resume,
+abort, completion, and failure states. Mission execution publishes current/next waypoint,
+remaining distance, ETA, progress, reserve target, and operator-readable detail. Long-running
+mission commands retain an active lifecycle until mission completion or a reconciled terminal
+failure.
+
+`MissionReviewAnalyzer` calculates route distance, estimated duration, maximum altitude, simulated
+battery use, projected reserve, and unsupported actions before execution. Simulator missions are
+limited to its 120 m model ceiling and explicitly reject unsupported waypoint actions.
+
 ## Official SDK read-only bridge
 
 `AutelSdkBridge` is a proprietary-type-free boundary for an optional Android binding around Autel's legacy AAR. Its public surface contains only initialization, discovery, disconnection, passive refresh, typed observation callbacks, and receive-only H.264 frames.
