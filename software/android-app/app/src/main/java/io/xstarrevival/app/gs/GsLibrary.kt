@@ -35,12 +35,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
 
 enum class RecordTab { FLIGHTS, FIND_AIRCRAFT }
 
 @Composable
-fun GsRecordsScreen(state: XStarState) {
+fun GsRecordsScreen(state: XStarState, recoveryPoints: List<RecoveryPoint> = emptyList()) {
     var tab by remember { mutableStateOf(RecordTab.FLIGHTS) }
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -56,7 +57,8 @@ fun GsRecordsScreen(state: XStarState) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        if (tab == RecordTab.FLIGHTS) FlightList(Modifier.weight(1f)) else FindAircraftPanel(state, Modifier.weight(1f))
+        if (tab == RecordTab.FLIGHTS) FlightList(Modifier.weight(1f))
+        else FindAircraftPanel(state, recoveryPoints, Modifier.weight(1f))
     }
 }
 
@@ -83,7 +85,8 @@ private fun FlightList(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FindAircraftPanel(state: XStarState, modifier: Modifier = Modifier) {
+private fun FindAircraftPanel(state: XStarState, recoveryPoints: List<RecoveryPoint>, modifier: Modifier = Modifier) {
+    val last = recoveryPoints.lastOrNull()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(Modifier.weight(.58f).fillMaxSize(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(18.dp)) {
             Box(Modifier.fillMaxSize()) {
@@ -91,33 +94,42 @@ private fun FindAircraftPanel(state: XStarState, modifier: Modifier = Modifier) 
                     val grid = Color.White.copy(alpha = .06f)
                     repeat(9) { i -> drawLine(grid, Offset(size.width * i / 8f, 0f), Offset(size.width * i / 8f, size.height), 1f) }
                     repeat(7) { i -> drawLine(grid, Offset(0f, size.height * i / 6f), Offset(size.width, size.height * i / 6f), 1f) }
-                    val points = listOf(
-                        Offset(size.width*.18f,size.height*.72f),
-                        Offset(size.width*.28f,size.height*.61f),
-                        Offset(size.width*.39f,size.height*.54f),
-                        Offset(size.width*.51f,size.height*.47f),
-                        Offset(size.width*.63f,size.height*.38f),
-                        Offset(size.width*.75f,size.height*.31f)
-                    )
-                    points.zipWithNext().forEach { (a,b) -> drawLine(GsColors.Orange.copy(alpha=.7f), a,b,4f) }
-                    points.forEach { drawCircle(GsColors.Orange, 7f, it) }
-                    drawCircle(GsColors.Red, 14f, points.last())
+                    if (recoveryPoints.isNotEmpty()) {
+                        val lats = recoveryPoints.map { it.position.latitudeDeg }
+                        val lons = recoveryPoints.map { it.position.longitudeDeg }
+                        val minLat = lats.minOrNull() ?: 0.0
+                        val maxLat = lats.maxOrNull() ?: minLat
+                        val minLon = lons.minOrNull() ?: 0.0
+                        val maxLon = lons.maxOrNull() ?: minLon
+                        val latSpan = (maxLat - minLat).takeIf { it > 0.000001 } ?: 0.000001
+                        val lonSpan = (maxLon - minLon).takeIf { it > 0.000001 } ?: 0.000001
+                        val points = recoveryPoints.map { point ->
+                            val x = ((point.position.longitudeDeg - minLon) / lonSpan).toFloat()
+                            val y = (1.0 - (point.position.latitudeDeg - minLat) / latSpan).toFloat()
+                            Offset(24f + x * (size.width - 48f), 24f + y * (size.height - 48f))
+                        }
+                        points.zipWithNext().forEach { (a, b) -> drawLine(GsColors.Orange.copy(alpha = .72f), a, b, 4f) }
+                        points.forEach { drawCircle(GsColors.Orange, 6f, it) }
+                        drawCircle(GsColors.Red, 13f, points.last())
+                    }
                 }
-                Text("LAST KNOWN PATH", Modifier.align(Alignment.TopStart).padding(16.dp), color = GsColors.Muted, fontSize = 10.sp)
+                Text("LAST KNOWN PATH · ${recoveryPoints.size} samples", Modifier.align(Alignment.TopStart).padding(16.dp), color = GsColors.Muted, fontSize = 10.sp)
+                if (recoveryPoints.isEmpty()) Text("No location has been recorded yet", Modifier.align(Alignment.Center), color = GsColors.Muted)
             }
         }
         GsSectionCard("LAST KNOWN AIRCRAFT", Modifier.weight(.42f).fillMaxSize()) {
-            GsSettingLine("Latitude", state.navigation.latitudeDeg?.let { "%.6f".format(it) } ?: "—")
-            GsSettingLine("Longitude", state.navigation.longitudeDeg?.let { "%.6f".format(it) } ?: "—")
-            GsSettingLine("Altitude", state.navigation.altitudeM?.let { "%.1f m".format(it) } ?: "—")
-            GsSettingLine("Ground speed", state.navigation.groundSpeedMps?.let { "%.1f m/s".format(it) } ?: "—")
-            GsSettingLine("Heading", state.attitude.yawDeg?.let { "%.0f°".format(it) } ?: "—")
-            GsSettingLine("Battery", state.battery.percent?.let { "$it%" } ?: "—")
+            GsSettingLine("Latitude", last?.position?.latitudeDeg?.let { "%.6f".format(it) } ?: state.navigation.latitudeDeg?.let { "%.6f".format(it) } ?: "—")
+            GsSettingLine("Longitude", last?.position?.longitudeDeg?.let { "%.6f".format(it) } ?: state.navigation.longitudeDeg?.let { "%.6f".format(it) } ?: "—")
+            GsSettingLine("Altitude", last?.altitudeM?.let { "%.1f m".format(it) } ?: state.navigation.altitudeM?.let { "%.1f m".format(it) } ?: "—")
+            GsSettingLine("Ground speed", last?.groundSpeedMps?.let { "%.1f m/s".format(it) } ?: state.navigation.groundSpeedMps?.let { "%.1f m/s".format(it) } ?: "—")
+            GsSettingLine("Heading", last?.headingDeg?.let { "%.0f°".format(it) } ?: state.attitude.yawDeg?.let { "%.0f°".format(it) } ?: "—")
+            GsSettingLine("Battery", last?.batteryPercent?.let { "$it%" } ?: state.battery.percent?.let { "$it%" } ?: "—")
+            GsSettingLine("Stored samples", recoveryPoints.size.toString())
             Spacer(Modifier.height(12.dp))
-            Text("The production tracker will persist recent GPS samples locally so the last position survives app restart and link loss.", color = GsColors.Muted, fontSize = 11.sp)
+            Text("Recent aircraft positions are stored only on this device so the last known location survives an app restart or radio-link loss.", color = GsColors.Muted, fontSize = 11.sp)
             Spacer(Modifier.height(12.dp))
-            Button(onClick = { }, modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO LAST POSITION") }
-            OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) { Text("EXPORT LAST PATH") }
+            Button(onClick = { }, enabled = last != null, modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO LAST POSITION") }
+            OutlinedButton(onClick = { }, enabled = recoveryPoints.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("EXPORT LAST PATH") }
         }
     }
 }
