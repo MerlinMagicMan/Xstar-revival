@@ -90,8 +90,14 @@ limited to its 120 m model ceiling and explicitly reject unsupported waypoint ac
 Waypoint missions support Hover, Land, and Return Home finish behaviors. Return Home keeps the
 mission command active after its final waypoint, publishes the shared dedicated RTH climb/return/
 landing state, and completes the mission only after touchdown at Home. Cancelling that RTH aborts
-the mission, while GPS, compass, Home Point, link-loss, and forced-landing scenarios produce an
+the mission, while GPS, compass, Home Point, and forced-landing scenarios produce an
 explicit mission failure instead of silently continuing autonomous navigation.
+
+Mission Land finishes remain active until the simulator reports touchdown. Configured lost-link
+behavior is also executable: Continue keeps the route running, Return Home hands the mission into
+the shared RTH state, and Hover pauses at the current position until the link recovers and the
+operator resumes. Link-loss handling ignores already terminal missions and preserves explicit
+command completion/cancellation semantics.
 
 ## Simulator smart flight
 

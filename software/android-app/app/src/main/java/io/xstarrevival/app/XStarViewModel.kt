@@ -144,6 +144,8 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     private var lastHeartbeatCount = 0L
     private var lastHeartbeatElapsedMs: Long? = null
+    private var connectionWasEstablished = false
+    private var linkLostElapsedMs: Long? = null
 
     init {
         collectActivePlatform()
@@ -356,19 +358,41 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun observeHeartbeat(next: XStarState) {
-        if (mutableSource.value != TelemetrySource.MAVLINK_REPLAY) return
-        val count = next.diagnostics.counters["mavlink_heartbeats"] ?: 0L
-        if (count < lastHeartbeatCount) resetHeartbeat()
-        if (count > lastHeartbeatCount) {
-            lastHeartbeatElapsedMs = SystemClock.elapsedRealtime()
-            lastHeartbeatCount = count
-            mutableHeartbeat.value = HeartbeatUiState(ageMs = 0, stale = false)
+        if (mutableSource.value == TelemetrySource.MAVLINK_REPLAY) {
+            val count = next.diagnostics.counters["mavlink_heartbeats"] ?: 0L
+            if (count < lastHeartbeatCount) resetHeartbeat()
+            if (count > lastHeartbeatCount) {
+                lastHeartbeatElapsedMs = SystemClock.elapsedRealtime()
+                lastHeartbeatCount = count
+                mutableHeartbeat.value = HeartbeatUiState(ageMs = 0, stale = false)
+            }
+            return
+        }
+        when (next.connection) {
+            is ConnectionState.Connected -> {
+                connectionWasEstablished = true
+                linkLostElapsedMs = null
+                mutableHeartbeat.value = HeartbeatUiState(ageMs = 0, stale = false)
+            }
+            ConnectionState.Disconnected,
+            is ConnectionState.Failed -> if (connectionWasEstablished && linkLostElapsedMs == null) {
+                linkLostElapsedMs = SystemClock.elapsedRealtime()
+            }
+            else -> Unit
         }
     }
 
     private fun updateHeartbeatAge() {
         if (mutableSource.value != TelemetrySource.MAVLINK_REPLAY) {
-            mutableHeartbeat.value = HeartbeatUiState()
+            val lostAt = linkLostElapsedMs
+            mutableHeartbeat.value = if (lostAt == null) {
+                HeartbeatUiState()
+            } else {
+                HeartbeatUiState(
+                    ageMs = (SystemClock.elapsedRealtime() - lostAt).coerceAtLeast(0),
+                    stale = true
+                )
+            }
             return
         }
         val observedAt = lastHeartbeatElapsedMs ?: return
@@ -379,6 +403,8 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     private fun resetHeartbeat() {
         lastHeartbeatCount = 0
         lastHeartbeatElapsedMs = null
+        connectionWasEstablished = false
+        linkLostElapsedMs = null
         mutableHeartbeat.value = HeartbeatUiState()
     }
 

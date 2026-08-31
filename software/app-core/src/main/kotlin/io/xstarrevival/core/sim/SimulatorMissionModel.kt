@@ -3,6 +3,7 @@ package io.xstarrevival.core.sim
 import io.xstarrevival.core.groundstation.MissionExecutionPhase
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionFinishBehavior
+import io.xstarrevival.core.groundstation.MissionLostLinkBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.groundstation.MissionWaypoint
 import io.xstarrevival.core.groundstation.SmartFlightPhase
@@ -17,6 +18,7 @@ data class SimulatorMissionRuntime(
     val waypointIndex: Int = 0,
     val holdRemainingSeconds: Double? = null,
     val returnHomeRuntime: SimulatorRthRuntime? = null,
+    val landingForFinish: Boolean = false,
     val detail: String? = "Mission accepted"
 )
 
@@ -44,7 +46,9 @@ object SimulatorMissionModel {
     fun start(plan: MissionPlan) = SimulatorMissionRuntime(plan = plan)
 
     fun pause(runtime: SimulatorMissionRuntime): SimulatorMissionRuntime? =
-        runtime.takeIf { it.phase == MissionExecutionPhase.ACTIVE && it.returnHomeRuntime == null }
+        runtime.takeIf {
+            it.phase == MissionExecutionPhase.ACTIVE && it.returnHomeRuntime == null && !it.landingForFinish
+        }
             ?.copy(phase = MissionExecutionPhase.PAUSED, detail = "Mission paused")
 
     fun resume(runtime: SimulatorMissionRuntime): SimulatorMissionRuntime? =
@@ -54,18 +58,51 @@ object SimulatorMissionModel {
     fun abort(runtime: SimulatorMissionRuntime, detail: String = "Mission aborted") = runtime.copy(
         phase = MissionExecutionPhase.ABORTED,
         returnHomeRuntime = runtime.returnHomeRuntime?.copy(phase = SmartFlightPhase.CANCELLED, detail = detail),
+        landingForFinish = false,
         detail = detail
     )
 
     fun fail(runtime: SimulatorMissionRuntime, detail: String) = runtime.copy(
         phase = MissionExecutionPhase.FAILED,
         returnHomeRuntime = runtime.returnHomeRuntime?.copy(phase = SmartFlightPhase.FAILED, detail = detail),
+        landingForFinish = false,
         detail = detail
     )
+
+    fun applyLostLink(snapshot: SimulatorSnapshot, runtime: SimulatorMissionRuntime): SimulatorMissionRuntime {
+        if (runtime.phase !in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) return runtime
+        return when (runtime.plan.lostLinkBehavior) {
+            MissionLostLinkBehavior.CONTINUE -> runtime.copy(
+                detail = when {
+                    runtime.phase == MissionExecutionPhase.PAUSED -> "Link lost · operator-paused mission remains paused"
+                    runtime.returnHomeRuntime?.phase == SmartFlightPhase.ACTIVE ->
+                        "Link lost · continuing Return-to-Home failsafe"
+                    else -> "Link lost · continuing configured mission"
+                }
+            )
+            MissionLostLinkBehavior.RETURN_HOME -> runtime.copy(
+                phase = MissionExecutionPhase.ACTIVE,
+                waypointIndex = runtime.plan.waypoints.size,
+                holdRemainingSeconds = null,
+                returnHomeRuntime = runtime.returnHomeRuntime?.takeIf { it.phase == SmartFlightPhase.ACTIVE }
+                    ?: SimulatorSmartFlightModel.startRth(snapshot),
+                landingForFinish = false,
+                detail = "Link lost · executing configured Return-to-Home failsafe"
+            )
+            MissionLostLinkBehavior.HOVER -> runtime.copy(
+                phase = MissionExecutionPhase.PAUSED,
+                holdRemainingSeconds = null,
+                returnHomeRuntime = null,
+                landingForFinish = false,
+                detail = "Link lost · hovering per configured failsafe"
+            )
+        }
+    }
 
     fun step(snapshot: SimulatorSnapshot, runtime: SimulatorMissionRuntime, deltaSeconds: Double): SimulatorMissionStep {
         if (runtime.phase != MissionExecutionPhase.ACTIVE) return SimulatorMissionStep(snapshot, runtime)
         runtime.returnHomeRuntime?.let { return stepReturnHome(snapshot, runtime, it, deltaSeconds) }
+        if (runtime.landingForFinish) return stepLandingFinish(snapshot, runtime)
         if (snapshot.phase == SimulatorFlightPhase.GROUNDED || snapshot.phase == SimulatorFlightPhase.ARMED) {
             return SimulatorMissionStep(
                 SimulatorFlightModel.takeOff(snapshot),
@@ -135,30 +172,45 @@ object SimulatorMissionModel {
         if (runtime == null) return MissionExecutionState()
         val hasReturnHome = runtime.returnHomeRuntime != null
         val returningHome = runtime.returnHomeRuntime?.phase == SmartFlightPhase.ACTIVE
+        val landingForFinish = runtime.landingForFinish
+        val hasFinish = hasReturnHome || landingForFinish
         val index = runtime.waypointIndex.coerceAtMost(runtime.plan.waypoints.lastIndex.coerceAtLeast(0))
-        val remaining = if (hasReturnHome) hypot(snapshot.northM, snapshot.eastM) else remainingDistance(snapshot, runtime.plan, index)
+        val remaining = when {
+            hasReturnHome -> hypot(snapshot.northM, snapshot.eastM)
+            landingForFinish -> 0.0
+            else -> remainingDistance(snapshot, runtime.plan, index)
+        }
         val returnProgress = runtime.returnHomeRuntime?.let { SimulatorSmartFlightModel.state(snapshot, it).progress }
         val progress = when (runtime.phase) {
             MissionExecutionPhase.COMPLETED -> 1.0
-            else -> returnProgress?.let { 0.9 + it * 0.1 }
-                ?: if (runtime.plan.waypoints.isEmpty()) 0.0 else index.toDouble() / runtime.plan.waypoints.size
+            else -> when {
+                landingForFinish -> 0.95
+                returnProgress != null -> 0.9 + returnProgress * 0.1
+                runtime.plan.waypoints.isEmpty() -> 0.0
+                else -> index.toDouble() / runtime.plan.waypoints.size
+            }
         }
         return MissionExecutionState(
             missionId = runtime.plan.id,
             missionName = runtime.plan.name,
             phase = runtime.phase,
             currentWaypoint = (index + 1).takeIf {
-                !hasReturnHome && runtime.plan.waypoints.isNotEmpty() && runtime.phase !in TERMINAL_PHASES
+                !hasFinish && runtime.plan.waypoints.isNotEmpty() && runtime.phase !in TERMINAL_PHASES
             },
             nextWaypoint = (index + 2).takeIf {
-                !hasReturnHome && it <= runtime.plan.waypoints.size && runtime.phase !in TERMINAL_PHASES
+                !hasFinish && it <= runtime.plan.waypoints.size && runtime.phase !in TERMINAL_PHASES
             },
             waypointCount = runtime.plan.waypoints.size,
             minimumBatteryReservePercent = runtime.plan.minimumBatteryReservePercent,
             returningHome = returningHome,
+            finishInProgress = runtime.phase == MissionExecutionPhase.ACTIVE && (returningHome || landingForFinish),
             progress = progress.coerceIn(0.0, 1.0),
             remainingDistanceM = if (runtime.phase == MissionExecutionPhase.COMPLETED) 0.0 else remaining,
-            etaSeconds = if (hasReturnHome) remaining / 8.0 + snapshot.altitudeM / 0.8 else estimateEtaSeconds(snapshot, runtime.plan, index),
+            etaSeconds = when {
+                hasReturnHome -> remaining / 8.0 + snapshot.altitudeM / 0.8
+                landingForFinish -> snapshot.altitudeM / 0.8
+                else -> estimateEtaSeconds(snapshot, runtime.plan, index)
+            },
             detail = runtime.detail
         )
     }
@@ -195,11 +247,45 @@ object SimulatorMissionModel {
         return SimulatorMissionStep(
             finishedSnapshot,
             runtime.copy(
-                phase = MissionExecutionPhase.COMPLETED,
+                phase = if (runtime.plan.finishBehavior == MissionFinishBehavior.LAND) {
+                    MissionExecutionPhase.ACTIVE
+                } else {
+                    MissionExecutionPhase.COMPLETED
+                },
                 waypointIndex = runtime.plan.waypoints.size,
                 holdRemainingSeconds = null,
-                detail = "Mission complete"
+                landingForFinish = runtime.plan.finishBehavior == MissionFinishBehavior.LAND,
+                detail = if (runtime.plan.finishBehavior == MissionFinishBehavior.LAND) {
+                    "Mission route complete · landing"
+                } else {
+                    "Mission complete"
+                }
             )
+        )
+    }
+
+    private fun stepLandingFinish(
+        snapshot: SimulatorSnapshot,
+        runtime: SimulatorMissionRuntime
+    ): SimulatorMissionStep {
+        if (snapshot.phase == SimulatorFlightPhase.GROUNDED) {
+            return SimulatorMissionStep(
+                snapshot,
+                runtime.copy(
+                    phase = MissionExecutionPhase.COMPLETED,
+                    landingForFinish = false,
+                    detail = "Mission complete · landed"
+                )
+            )
+        }
+        val landing = if (snapshot.phase in setOf(SimulatorFlightPhase.FLYING, SimulatorFlightPhase.TAKING_OFF)) {
+            SimulatorFlightModel.land(snapshot)
+        } else {
+            snapshot
+        }
+        return SimulatorMissionStep(
+            landing,
+            runtime.copy(detail = "Mission finish · landing at final waypoint")
         )
     }
 

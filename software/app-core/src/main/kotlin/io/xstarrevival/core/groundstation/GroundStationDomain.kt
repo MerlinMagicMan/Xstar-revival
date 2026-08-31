@@ -66,6 +66,7 @@ data class MissionExecutionState(
     val waypointCount: Int = 0,
     val minimumBatteryReservePercent: Int? = null,
     val returningHome: Boolean = false,
+    val finishInProgress: Boolean = false,
     val progress: Double = 0.0,
     val remainingDistanceM: Double? = null,
     val etaSeconds: Double? = null,

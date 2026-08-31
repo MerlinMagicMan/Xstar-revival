@@ -46,6 +46,7 @@ import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.groundstation.MissionExecutionPhase
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionFinishBehavior
+import io.xstarrevival.core.groundstation.MissionLostLinkBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.groundstation.MissionReviewAnalyzer
 import io.xstarrevival.core.groundstation.MissionValidator
@@ -301,6 +302,21 @@ private fun MissionEditor(
                             }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text("LOST-LINK FAILSAFE", color = GsColors.Orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MissionLostLinkBehavior.entries.forEach { behavior ->
+                            if (draft.lostLinkBehavior == behavior) {
+                                Button(onClick = { draft = draft.copy(lostLinkBehavior = behavior) }) {
+                                    Text(behavior.name.replace('_', ' '))
+                                }
+                            } else {
+                                OutlinedButton(onClick = { draft = draft.copy(lostLinkBehavior = behavior) }) {
+                                    Text(behavior.name.replace('_', ' '))
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -344,6 +360,7 @@ private fun MissionEditor(
                     GsSettingLine("Projected reserve margin", review.projectedReservePercent?.let { "$it%" } ?: "Unavailable")
                     GsSettingLine("Battery reserve", "${draft.minimumBatteryReservePercent}%")
                     GsSettingLine("Finish behavior", draft.finishBehavior.name.replace('_', ' '))
+                    GsSettingLine("Lost-link failsafe", draft.lostLinkBehavior.name.replace('_', ' '))
                     val home = state.navigation.homeLatitudeDeg?.let { latitude ->
                         state.navigation.homeLongitudeDeg?.let { longitude -> "%.5f, %.5f".format(latitude, longitude) }
                     } ?: "Unavailable"
@@ -389,7 +406,7 @@ private fun MissionExecutionPanel(
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Button(
             onClick = onPause,
-            enabled = execution.phase == MissionExecutionPhase.ACTIVE && !execution.returningHome
+            enabled = execution.phase == MissionExecutionPhase.ACTIVE && !execution.finishInProgress
         ) { Text("PAUSE") }
         Button(onClick = onResume, enabled = execution.phase == MissionExecutionPhase.PAUSED) { Text("RESUME") }
         OutlinedButton(

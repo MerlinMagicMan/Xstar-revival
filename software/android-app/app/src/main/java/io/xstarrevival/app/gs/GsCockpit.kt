@@ -298,7 +298,14 @@ private fun GsTopTelemetry(state: XStarState, source: TelemetrySource, heartbeat
             TelemetrySource.MAVLINK_REPLAY -> "REPLAY"
             TelemetrySource.MOCK -> "MOCK"
         })
-        if (heartbeat.stale) Text("STALE", color = GsColors.Red, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+        if (heartbeat.stale) {
+            Text(
+                "LOST ${heartbeat.ageMs?.let { "${it / 1_000}s" } ?: "LINK"}",
+                color = GsColors.Red,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+            )
+        }
     }
 }
 

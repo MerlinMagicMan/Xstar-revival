@@ -4,6 +4,7 @@ import io.xstarrevival.core.XStarPlatform
 import io.xstarrevival.core.groundstation.MissionExecutionPhase
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionFinishBehavior
+import io.xstarrevival.core.groundstation.MissionLostLinkBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.SmartFlightExecutionState
@@ -165,8 +166,9 @@ class SimulatorXStarPlatform(
             SimulatorScenario.MISSION_PAUSE -> SimulatorMissionModel.pause(started)
             SimulatorScenario.MISSION_ABORT -> SimulatorMissionModel.abort(started, "Mission aborted by scenario")
             SimulatorScenario.RTH_DURING_MISSION -> SimulatorMissionModel.abort(started, "Mission interrupted by Return-to-Home")
+            SimulatorScenario.RC_LINK_LOSS,
             SimulatorScenario.COMPLETE_LINK_LOSS,
-            SimulatorScenario.CONNECTION_LOSS_DURING_MISSION -> SimulatorMissionModel.fail(started, "Aircraft link lost during mission")
+            SimulatorScenario.CONNECTION_LOSS_DURING_MISSION -> applyMissionLostLink(started)
             else -> started
         }
         publish()
@@ -312,9 +314,10 @@ class SimulatorXStarPlatform(
             SimulatorScenario.MISSION_PAUSE -> missionRuntime?.let(SimulatorMissionModel::pause) ?: missionRuntime
             SimulatorScenario.MISSION_ABORT -> missionRuntime?.let { SimulatorMissionModel.abort(it, "Mission aborted by scenario") }
             SimulatorScenario.RTH_DURING_MISSION -> missionRuntime?.let { SimulatorMissionModel.abort(it, "Mission interrupted by Return-to-Home") }
+            SimulatorScenario.RC_LINK_LOSS,
             SimulatorScenario.COMPLETE_LINK_LOSS,
             SimulatorScenario.CONNECTION_LOSS_DURING_MISSION -> missionRuntime?.let {
-                SimulatorMissionModel.fail(it, "Aircraft link lost during mission")
+                applyMissionLostLink(it)
             }
             else -> missionRuntime
         }
@@ -351,6 +354,16 @@ class SimulatorXStarPlatform(
             frozenLinkLossState ?: normalizedBaseState(),
             mutableScenario.value
         )
+    }
+
+    private fun applyMissionLostLink(runtime: SimulatorMissionRuntime): SimulatorMissionRuntime {
+        if (
+            runtime.plan.lostLinkBehavior == MissionLostLinkBehavior.RETURN_HOME &&
+            snapshot.phase == SimulatorFlightPhase.LANDING
+        ) {
+            snapshot = snapshot.copy(phase = SimulatorFlightPhase.FLYING, verticalSpeedMps = 0.0)
+        }
+        return SimulatorMissionModel.applyLostLink(snapshot, runtime)
     }
 
     private fun normalizedBaseState(): XStarState {
