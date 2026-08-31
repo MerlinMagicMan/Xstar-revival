@@ -109,10 +109,17 @@ class CommandSafetyValidator {
             is SetGimbalPitchCommand -> {
                 if (command.pitchDeg !in -90.0..30.0) issues += blocking("Gimbal pitch must be between -90° and 30°")
             }
-            RecenterGimbalCommand, CalibrateGimbalCommand -> Unit
+            RecenterGimbalCommand -> Unit
+            CalibrateGimbalCommand -> when (val altitude = state.navigation.altitudeM) {
+                null -> issues += blocking("Altitude state is unavailable for gimbal calibration")
+                else -> if (state.aircraft.armed == true || altitude > 0.2) {
+                    issues += blocking("Gimbal calibration requires the aircraft to be landed and disarmed")
+                }
+            }
             is ConfigureGimbalCommand -> {
                 if (command.sensitivity !in 0.0..1.0) issues += blocking("Gimbal sensitivity must be between 0 and 1")
                 if (command.smoothing !in 0.0..1.0) issues += blocking("Gimbal smoothing must be between 0 and 1")
+                if (command.pitchSpeed !in 0.1..1.0) issues += blocking("Gimbal pitch speed must be between 0.1 and 1")
             }
             is SetFlightLimitsCommand -> {
                 if (command.maximumAltitudeM !in 30.0..500.0) issues += blocking("Maximum altitude must be between 30 m and 500 m")

@@ -3,6 +3,7 @@ package io.xstarrevival.core.sim
 import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CancelReturnToHomeCommand
+import io.xstarrevival.core.command.CalibrateGimbalCommand
 import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CommandAcknowledgement
 import io.xstarrevival.core.command.CommandCompletion
@@ -10,6 +11,7 @@ import io.xstarrevival.core.command.CommandKind
 import io.xstarrevival.core.command.CommandRequest
 import io.xstarrevival.core.command.CommandTransport
 import io.xstarrevival.core.command.ConfigureCameraCommand
+import io.xstarrevival.core.command.ConfigureGimbalCommand
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.EmergencyLandCommand
 import io.xstarrevival.core.command.LandCommand
@@ -58,6 +60,8 @@ class SimulatorCommandAdapter(
         CommandKind.CONFIGURE_CAMERA,
         CommandKind.SET_GIMBAL_PITCH,
         CommandKind.RECENTER_GIMBAL,
+        CommandKind.CALIBRATE_GIMBAL,
+        CommandKind.CONFIGURE_GIMBAL,
         CommandKind.START_WAYPOINT_MISSION,
         CommandKind.PAUSE_MISSION,
         CommandKind.RESUME_MISSION,
@@ -88,6 +92,12 @@ class SimulatorCommandAdapter(
             is ConfigureCameraCommand -> platform.configureCamera(command.parameters)
             is SetGimbalPitchCommand -> platform.setGimbalPitch(command.pitchDeg)
             RecenterGimbalCommand -> platform.setGimbalPitch(0.0)
+            CalibrateGimbalCommand -> platform.calibrateGimbal()
+            is ConfigureGimbalCommand -> platform.configureGimbal(
+                command.sensitivity,
+                command.smoothing,
+                command.pitchSpeed
+            )
             is StartWaypointMissionCommand -> if (!platform.startMission(command.mission)) {
                 return CommandAcknowledgement.Rejected("Simulator could not start the mission")
             }
@@ -170,6 +180,14 @@ class SimulatorCommandAdapter(
             }
             RecenterGimbalCommand -> awaitState(request) {
                 it.gimbal.pitchDeg?.let { pitch -> kotlin.math.abs(pitch) < 0.01 } == true
+            }
+            CalibrateGimbalCommand -> awaitState(request) {
+                it.gimbal.calibrated == true && it.gimbal.status == "CALIBRATED"
+            }
+            is ConfigureGimbalCommand -> awaitState(request) {
+                it.gimbal.sensitivity == command.sensitivity &&
+                    it.gimbal.smoothing == command.smoothing &&
+                    it.gimbal.pitchSpeed == command.pitchSpeed
             }
             TakePhotoCommand -> awaitState(request) { it.camera.photosTaken > 0 }
             is StartWaypointMissionCommand -> awaitMissionTerminal()

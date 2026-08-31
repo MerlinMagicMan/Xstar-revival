@@ -48,6 +48,11 @@ data class SimulatorSnapshot(
     val pitchDeg: Double = 0.0,
     val yawDeg: Double = 0.0,
     val gimbalPitchDeg: Double = -15.0,
+    val gimbalSensitivity: Double = 0.5,
+    val gimbalSmoothing: Double = 0.6,
+    val gimbalPitchSpeed: Double = 0.5,
+    val gimbalStatus: String = "READY",
+    val gimbalCalibrated: Boolean = true,
     val batteryPercent: Double = 88.0,
     val recording: Boolean = false,
     val cameraMode: String = "VIDEO",
@@ -146,6 +151,24 @@ object SimulatorFlightModel {
 
     fun setGimbalPitch(snapshot: SimulatorSnapshot, pitchDeg: Double): SimulatorSnapshot =
         snapshot.copy(gimbalPitchDeg = pitchDeg.coerceIn(-90.0, 30.0))
+
+    fun calibrateGimbal(snapshot: SimulatorSnapshot): SimulatorSnapshot = snapshot.copy(
+        gimbalPitchDeg = 0.0,
+        gimbalStatus = "CALIBRATED",
+        gimbalCalibrated = true
+    )
+
+    fun configureGimbal(
+        snapshot: SimulatorSnapshot,
+        sensitivity: Double,
+        smoothing: Double,
+        pitchSpeed: Double
+    ): SimulatorSnapshot = snapshot.copy(
+        gimbalSensitivity = sensitivity,
+        gimbalSmoothing = smoothing,
+        gimbalPitchSpeed = pitchSpeed,
+        gimbalStatus = "READY"
+    )
 
     fun step(
         snapshot: SimulatorSnapshot,
@@ -298,7 +321,14 @@ object SimulatorFlightModel {
                     }
                 )
             ),
-            gimbal = GimbalState(pitchDeg = snapshot.gimbalPitchDeg, status = "SIMULATED"),
+            gimbal = GimbalState(
+                pitchDeg = snapshot.gimbalPitchDeg,
+                status = snapshot.gimbalStatus,
+                sensitivity = snapshot.gimbalSensitivity,
+                smoothing = snapshot.gimbalSmoothing,
+                pitchSpeed = snapshot.gimbalPitchSpeed,
+                calibrated = snapshot.gimbalCalibrated
+            ),
             diagnostics = DiagnosticsState(
                 source = "local-simulator",
                 counters = mapOf("sim_steps" to (snapshot.elapsedSeconds * 20.0).toLong()),

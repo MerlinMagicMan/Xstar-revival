@@ -171,6 +171,16 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun calibrateGimbal() {
+        snapshot = SimulatorFlightModel.calibrateGimbal(snapshot)
+        publish()
+    }
+
+    fun configureGimbal(sensitivity: Double, smoothing: Double, pitchSpeed: Double) {
+        snapshot = SimulatorFlightModel.configureGimbal(snapshot, sensitivity, smoothing, pitchSpeed)
+        publish()
+    }
+
     fun startMission(plan: MissionPlan): Boolean {
         if (missionRuntime?.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) return false
         if (

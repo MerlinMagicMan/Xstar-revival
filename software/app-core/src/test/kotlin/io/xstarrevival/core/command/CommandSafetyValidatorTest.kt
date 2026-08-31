@@ -129,6 +129,35 @@ class CommandSafetyValidatorTest {
     }
 
     @Test
+    fun `gimbal response and pitch ranges are validated`() {
+        val pitch = validator.validate(
+            SetGimbalPitchCommand(-91.0),
+            healthyState(),
+            setOf(CommandKind.SET_GIMBAL_PITCH)
+        )
+        val configuration = validator.validate(
+            ConfigureGimbalCommand(sensitivity = 1.1, smoothing = -.1, pitchSpeed = 0.0),
+            healthyState(),
+            setOf(CommandKind.CONFIGURE_GIMBAL)
+        )
+        val airborneCalibration = validator.validate(
+            CalibrateGimbalCommand,
+            healthyState().copy(
+                aircraft = AircraftState(armed = true, flightMode = "FLYING"),
+                navigation = healthyState().navigation.copy(altitudeM = 12.0)
+            ),
+            setOf(CommandKind.CALIBRATE_GIMBAL)
+        )
+
+        assertFalse(pitch.canDispatch)
+        assertTrue(pitch.issues.any { it.message.contains("pitch") })
+        assertFalse(configuration.canDispatch)
+        assertTrue(configuration.issues.size >= 3)
+        assertFalse(airborneCalibration.canDispatch)
+        assertTrue(airborneCalibration.issues.any { it.message.contains("landed and disarmed") })
+    }
+
+    @Test
     fun `emergency landing remains available during conflicts and critical warnings`() {
         val airborne = healthyState().copy(
             aircraft = AircraftState(armed = true, flightMode = "FLYING"),

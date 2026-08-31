@@ -107,7 +107,11 @@ sealed interface GimbalCommand : AircraftCommand
 data class SetGimbalPitchCommand(val pitchDeg: Double) : GimbalCommand { override val kind = CommandKind.SET_GIMBAL_PITCH }
 data object RecenterGimbalCommand : GimbalCommand { override val kind = CommandKind.RECENTER_GIMBAL }
 data object CalibrateGimbalCommand : GimbalCommand { override val kind = CommandKind.CALIBRATE_GIMBAL }
-data class ConfigureGimbalCommand(val sensitivity: Double, val smoothing: Double) : GimbalCommand {
+data class ConfigureGimbalCommand(
+    val sensitivity: Double,
+    val smoothing: Double,
+    val pitchSpeed: Double = 0.5
+) : GimbalCommand {
     override val kind = CommandKind.CONFIGURE_GIMBAL
 }
 

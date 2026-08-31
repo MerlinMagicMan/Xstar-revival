@@ -67,6 +67,8 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
                     vm::takeSimulatorPhoto, vm::setSimulatorCameraMode,
                     vm::setSimulatorExposure, vm::configureSimulatorCamera,
+                    vm::setSimulatorGimbalPitch, vm::recenterSimulatorGimbal,
+                    vm::calibrateSimulatorGimbal, vm::configureSimulatorGimbal,
                     vm::setSimulatorScenario, vm::setSimulatorControls,
                     vm::startSimulatorMission, vm::pauseSimulatorMission,
                     vm::resumeSimulatorMission, vm::abortSimulatorMission,
@@ -104,6 +106,10 @@ private fun GroundStationV2App(
     onSimulatorCameraMode: (String) -> Unit,
     onSimulatorExposure: (Int?, Double?, Double?) -> Unit,
     onSimulatorCameraConfiguration: (Map<String, String>) -> Unit,
+    onSimulatorGimbalPitch: (Double) -> Unit,
+    onSimulatorGimbalRecenter: () -> Unit,
+    onSimulatorGimbalCalibration: () -> Unit,
+    onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartMission: (MissionPlan) -> Unit,
@@ -158,6 +164,8 @@ private fun GroundStationV2App(
                     state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
                     onSimulatorPhoto, onSimulatorCameraMode, onSimulatorExposure, onSimulatorCameraConfiguration,
+                    onSimulatorGimbalPitch, onSimulatorGimbalRecenter,
+                    onSimulatorGimbalCalibration, onSimulatorGimbalConfiguration,
                     onSimulatorScenario, onSimulatorControls, onStartRth, onCancelRth,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )

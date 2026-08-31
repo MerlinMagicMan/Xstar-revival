@@ -66,7 +66,14 @@ sealed interface XStarEvent {
         val storageRemainingMb: Long? = null
     ) : XStarEvent
 
-    data class GimbalSnapshot(val pitchDeg: Double? = null, val status: String? = null) : XStarEvent
+    data class GimbalSnapshot(
+        val pitchDeg: Double? = null,
+        val status: String? = null,
+        val sensitivity: Double? = null,
+        val smoothing: Double? = null,
+        val pitchSpeed: Double? = null,
+        val calibrated: Boolean? = null
+    ) : XStarEvent
     data class ImageLinkSnapshot(
         val usbEnabled: Boolean? = null,
         val rfFrequencyHz: Double? = null,
