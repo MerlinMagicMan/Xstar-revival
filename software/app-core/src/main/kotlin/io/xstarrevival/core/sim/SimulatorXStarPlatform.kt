@@ -154,12 +154,12 @@ class SimulatorXStarPlatform(
         if (missionRuntime?.phase in setOf(MissionExecutionPhase.ACTIVE, MissionExecutionPhase.PAUSED)) return false
         if (
             plan.waypoints.isEmpty() ||
-            plan.finishBehavior == MissionFinishBehavior.RETURN_HOME ||
             plan.waypoints.any { it.altitudeM > 120.0 } ||
             plan.waypoints.flatMap { it.actions }.any { it.type !in SimulatorMissionModel.supportedWaypointActions }
         ) return false
         val started = SimulatorMissionModel.start(plan)
         input = SimulatorControlInput()
+        smartFlightRuntime = null
         missionRuntime = when (mutableScenario.value) {
             SimulatorScenario.WAYPOINT_FAILURE -> SimulatorMissionModel.fail(started, "Waypoint execution failed")
             SimulatorScenario.MISSION_PAUSE -> SimulatorMissionModel.pause(started)
@@ -214,7 +214,15 @@ class SimulatorXStarPlatform(
         return true
     }
 
-    fun cancelReturnToHome(): Boolean = cancelSmartFlight(SmartFlightMode.RETURN_TO_HOME, "Return-to-Home cancelled")
+    fun cancelReturnToHome(): Boolean {
+        val mission = missionRuntime
+        if (mission?.phase == MissionExecutionPhase.ACTIVE && mission.returnHomeRuntime?.phase == SmartFlightPhase.ACTIVE) {
+            missionRuntime = SimulatorMissionModel.abort(mission, "Mission Return-to-Home cancelled")
+            publish()
+            return true
+        }
+        return cancelSmartFlight(SmartFlightMode.RETURN_TO_HOME, "Return-to-Home cancelled")
+    }
 
     fun startOrbit(
         center: GeoPoint,
@@ -288,6 +296,18 @@ class SimulatorXStarPlatform(
             snapshot = SimulatorFlightModel.land(snapshot)
         }
         missionRuntime = when (value) {
+            SimulatorScenario.GPS_LOST,
+            SimulatorScenario.COMPASS_FAILURE -> missionRuntime?.let {
+                SimulatorMissionModel.fail(it, "${value.label} interrupted mission navigation")
+            }
+            SimulatorScenario.HOME_UNAVAILABLE -> missionRuntime?.let {
+                if (it.plan.finishBehavior == MissionFinishBehavior.RETURN_HOME) {
+                    SimulatorMissionModel.fail(it, "Home Point became unavailable for mission Return-to-Home")
+                } else it
+            }
+            SimulatorScenario.FORCED_LANDING -> missionRuntime?.let {
+                SimulatorMissionModel.fail(it, "Forced landing interrupted mission")
+            }
             SimulatorScenario.WAYPOINT_FAILURE -> missionRuntime?.let { SimulatorMissionModel.fail(it, "Waypoint execution failed") }
             SimulatorScenario.MISSION_PAUSE -> missionRuntime?.let(SimulatorMissionModel::pause) ?: missionRuntime
             SimulatorScenario.MISSION_ABORT -> missionRuntime?.let { SimulatorMissionModel.abort(it, "Mission aborted by scenario") }
@@ -325,7 +345,8 @@ class SimulatorXStarPlatform(
 
     private fun publish() {
         mutableMissionExecution.value = SimulatorMissionModel.state(snapshot, missionRuntime)
-        mutableSmartFlightExecution.value = SimulatorSmartFlightModel.state(snapshot, smartFlightRuntime)
+        val missionReturnHome = missionRuntime?.returnHomeRuntime
+        mutableSmartFlightExecution.value = SimulatorSmartFlightModel.state(snapshot, smartFlightRuntime ?: missionReturnHome)
         mutableState.value = SimulatorScenarioApplier.apply(
             frozenLinkLossState ?: normalizedBaseState(),
             mutableScenario.value
@@ -335,8 +356,9 @@ class SimulatorXStarPlatform(
     private fun normalizedBaseState(): XStarState {
         val base = SimulatorFlightModel.toXStarState(snapshot)
         val missionPhase = missionRuntime?.phase
+        val effectiveSmartFlight = smartFlightRuntime ?: missionRuntime?.returnHomeRuntime
         val mode = when {
-            smartFlightRuntime?.phase == SmartFlightPhase.ACTIVE -> when (smartFlightRuntime?.mode) {
+            effectiveSmartFlight?.phase == SmartFlightPhase.ACTIVE -> when (effectiveSmartFlight.mode) {
                 SmartFlightMode.RETURN_TO_HOME -> "RETURN TO HOME"
                 SmartFlightMode.ORBIT -> "ORBIT"
                 SmartFlightMode.FOLLOW -> "FOLLOW"

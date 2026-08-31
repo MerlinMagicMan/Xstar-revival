@@ -1,6 +1,7 @@
 package io.xstarrevival.core.sim
 
 import io.xstarrevival.core.command.AbortMissionCommand
+import io.xstarrevival.core.command.CancelReturnToHomeCommand
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandPhase
 import io.xstarrevival.core.command.PauseMissionCommand
@@ -8,8 +9,11 @@ import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.MissionExecutionPhase
+import io.xstarrevival.core.groundstation.MissionFinishBehavior
 import io.xstarrevival.core.groundstation.MissionPlan
 import io.xstarrevival.core.groundstation.MissionWaypoint
+import io.xstarrevival.core.groundstation.SmartFlightMode
+import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.groundstation.WaypointAction
 import io.xstarrevival.core.groundstation.WaypointActionType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -106,6 +110,87 @@ class SimulatorMissionModelTest {
 
         assertEquals(MissionExecutionPhase.FAILED, platform.missionExecution.value.phase)
         assertEquals(CommandPhase.FAILED, dispatcher.statuses.value.getValue(startId).phase)
+    }
+
+    @Test
+    fun `return home finish completes only after landing at home`() {
+        val plan = missionPlan().copy(finishBehavior = MissionFinishBehavior.RETURN_HOME)
+        var snapshot = SimulatorSnapshot()
+        var runtime = SimulatorMissionModel.start(plan)
+        var observedReturnHome = false
+
+        repeat(1_600) {
+            snapshot = SimulatorFlightModel.step(snapshot, SimulatorControlInput(), 0.05)
+            val step = SimulatorMissionModel.step(snapshot, runtime, 0.05)
+            snapshot = step.snapshot
+            runtime = step.runtime
+            observedReturnHome = observedReturnHome || runtime.returnHomeRuntime?.phase == SmartFlightPhase.ACTIVE
+        }
+
+        assertTrue(observedReturnHome)
+        assertEquals(MissionExecutionPhase.COMPLETED, runtime.phase)
+        assertEquals(SmartFlightPhase.COMPLETED, runtime.returnHomeRuntime?.phase)
+        assertEquals(SimulatorFlightPhase.GROUNDED, snapshot.phase)
+        assertTrue(kotlin.math.hypot(snapshot.northM, snapshot.eastM) < 0.8)
+    }
+
+    @Test
+    fun `dispatcher publishes and can cancel mission return home`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+        val startId = dispatcher.dispatch(
+            StartWaypointMissionCommand(missionPlan().copy(finishBehavior = MissionFinishBehavior.RETURN_HOME))
+        )
+
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(platform.missionExecution.value.returningHome)
+        assertEquals(SmartFlightMode.RETURN_TO_HOME, platform.smartFlightExecution.value.mode)
+        assertEquals(SmartFlightPhase.ACTIVE, platform.smartFlightExecution.value.phase)
+
+        assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(CancelReturnToHomeCommand).phase)
+        runCurrent()
+        assertEquals(MissionExecutionPhase.ABORTED, platform.missionExecution.value.phase)
+        assertEquals(SmartFlightPhase.CANCELLED, platform.smartFlightExecution.value.phase)
+        assertEquals(CommandPhase.CANCELLED, dispatcher.statuses.value.getValue(startId).phase)
+    }
+
+    @Test
+    fun `dispatcher completes return home mission after landing`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+
+        val status = dispatcher.dispatchAndAwait(
+            StartWaypointMissionCommand(missionPlan().copy(finishBehavior = MissionFinishBehavior.RETURN_HOME))
+        )
+
+        assertEquals(CommandPhase.COMPLETED, status.phase)
+        assertEquals(MissionExecutionPhase.COMPLETED, platform.missionExecution.value.phase)
+        assertEquals(SmartFlightPhase.COMPLETED, platform.smartFlightExecution.value.phase)
+        assertEquals("GROUNDED", platform.state.value.aircraft.flightMode)
+    }
+
+    @Test
+    fun `home loss fails mission return home and its command`() = runTest {
+        val platform = SimulatorXStarPlatform(backgroundScope, tickMs = 50)
+        platform.connect()
+        val dispatcher = CommandDispatcher(this, { platform.state.value }, SimulatorCommandAdapter(platform))
+        val startId = dispatcher.dispatch(
+            StartWaypointMissionCommand(missionPlan().copy(finishBehavior = MissionFinishBehavior.RETURN_HOME))
+        )
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(platform.missionExecution.value.returningHome)
+
+        platform.setScenario(SimulatorScenario.HOME_UNAVAILABLE)
+        runCurrent()
+
+        assertEquals(MissionExecutionPhase.FAILED, platform.missionExecution.value.phase)
+        assertEquals(SmartFlightPhase.FAILED, platform.smartFlightExecution.value.phase)
+        assertEquals(CommandPhase.FAILED, dispatcher.statuses.value.getValue(startId).phase)
+        assertTrue(platform.missionExecution.value.detail.orEmpty().contains("Home Point"))
     }
 
     private fun missionPlan() = MissionPlan(

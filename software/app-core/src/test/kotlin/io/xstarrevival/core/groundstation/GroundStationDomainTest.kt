@@ -119,6 +119,34 @@ class GroundStationDomainTest {
     }
 
     @Test
+    fun missionReviewIncludesReturnHomeDistanceAndLandingTime() {
+        val home = GeoPoint(41.8781, -87.6298)
+        val waypoint = GeoPoint(41.8782, -87.6298)
+        val hover = MissionReviewAnalyzer.analyze(
+            plan = MissionPlan(
+                id = "hover",
+                name = "Hover",
+                waypoints = listOf(MissionWaypoint("w1", waypoint, 20.0, 5.0))
+            ),
+            start = home,
+            home = home
+        )
+        val returnHome = MissionReviewAnalyzer.analyze(
+            plan = MissionPlan(
+                id = "rth",
+                name = "RTH",
+                waypoints = listOf(MissionWaypoint("w1", waypoint, 20.0, 5.0)),
+                finishBehavior = MissionFinishBehavior.RETURN_HOME
+            ),
+            start = home,
+            home = home
+        )
+
+        assertTrue(returnHome.totalDistanceM > hover.totalDistanceM * 1.9)
+        assertTrue(returnHome.estimatedDurationSeconds > hover.estimatedDurationSeconds + 25.0)
+    }
+
+    @Test
     fun batteryHealthUsesCapacityAndCellDelta() {
         val battery = BatteryState(
             designCapacityMah = 4900,

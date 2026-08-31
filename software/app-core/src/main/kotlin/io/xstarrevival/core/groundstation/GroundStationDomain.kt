@@ -65,6 +65,7 @@ data class MissionExecutionState(
     val nextWaypoint: Int? = null,
     val waypointCount: Int = 0,
     val minimumBatteryReservePercent: Int? = null,
+    val returningHome: Boolean = false,
     val progress: Double = 0.0,
     val remainingDistanceM: Double? = null,
     val etaSeconds: Double? = null,
@@ -99,6 +100,7 @@ object MissionReviewAnalyzer {
     fun analyze(
         plan: MissionPlan,
         start: GeoPoint? = null,
+        home: GeoPoint? = null,
         currentBatteryPercent: Int? = null,
         supportedActions: Set<WaypointActionType> = WaypointActionType.entries.toSet(),
         supportedFinishBehaviors: Set<MissionFinishBehavior> = MissionFinishBehavior.entries.toSet()
@@ -111,6 +113,11 @@ object MissionReviewAnalyzer {
             distance += leg
             duration += leg / waypoint.speedMps.coerceAtLeast(0.5) + waypoint.delaySeconds
             previous = waypoint.position
+        }
+        if (plan.finishBehavior == MissionFinishBehavior.RETURN_HOME && home != null) {
+            val returnDistance = previous?.let { distanceMeters(it, home) } ?: 0.0
+            distance += returnDistance
+            duration += returnDistance / 8.0 + (plan.waypoints.lastOrNull()?.altitudeM ?: 0.0) / 0.8
         }
         val batteryUse = ceil(duration / 60.0 * 1.5).toInt().coerceIn(0, 100)
         val projected = currentBatteryPercent?.let { (it - batteryUse).coerceAtLeast(0) }
