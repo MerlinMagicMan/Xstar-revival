@@ -30,8 +30,10 @@ import io.xstarrevival.app.gs.GsNavigationRail
 import io.xstarrevival.app.gs.GsPage
 import io.xstarrevival.app.gs.GsPersistence
 import io.xstarrevival.app.gs.GsRecordsScreen
+import io.xstarrevival.app.gs.GsSessionTracker
 import io.xstarrevival.app.gs.GsSettingsScreen
 import io.xstarrevival.app.gs.GsTheme
+import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.video.H264VideoFrame
@@ -46,21 +48,10 @@ class GroundStationV2Activity : ComponentActivity() {
                 val state by vm.state.collectAsStateWithLifecycle()
                 val source by vm.source.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
-
                 GroundStationV2App(
-                    state = state,
-                    source = source,
-                    heartbeat = heartbeat,
-                    availableSources = vm.availableSources,
-                    liveVideoFrames = vm.liveVideoFrames,
-                    onSource = vm::selectSource,
-                    onConnect = vm::connect,
-                    onDisconnect = vm::disconnect,
-                    onRefresh = vm::refresh,
-                    onSimulatorArm = vm::toggleSimulatorArm,
-                    onSimulatorTakeOff = vm::simulatorTakeOff,
-                    onSimulatorLand = vm::simulatorLand,
-                    onSimulatorRecord = vm::toggleSimulatorRecording
+                    state, source, heartbeat, vm.availableSources, vm.liveVideoFrames,
+                    vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
+                    vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording
                 )
             }
         }
@@ -86,7 +77,9 @@ private fun GroundStationV2App(
     var page by rememberSaveable { mutableStateOf(GsPage.GARAGE) }
     val context = LocalContext.current
     val persistence = remember(context) { GsPersistence(context.applicationContext) }
+    val sessionTracker = remember(persistence) { GsSessionTracker(persistence) }
     var recoveryPoints by remember { mutableStateOf<List<RecoveryPoint>>(persistence.loadRecoveryPoints()) }
+    var flightSummaries by remember { mutableStateOf<List<PersistedFlightSummary>>(persistence.loadFlightSummaries()) }
     var lastRecoveryWriteMs by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(
@@ -94,16 +87,16 @@ private fun GroundStationV2App(
         state.navigation.longitudeDeg,
         state.navigation.altitudeM,
         state.navigation.groundSpeedMps,
-        state.battery.percent
+        state.battery.percent,
+        state.aircraft.armed
     ) {
-        if (state.navigation.latitudeDeg != null && state.navigation.longitudeDeg != null) {
-            val now = System.currentTimeMillis()
-            if (now - lastRecoveryWriteMs >= 1_000L) {
-                persistence.saveRecoveryPoint(state, now)
-                lastRecoveryWriteMs = now
-                recoveryPoints = persistence.loadRecoveryPoints()
-            }
+        val now = System.currentTimeMillis()
+        if (state.navigation.latitudeDeg != null && state.navigation.longitudeDeg != null && now - lastRecoveryWriteMs >= 1_000L) {
+            persistence.saveRecoveryPoint(state, now)
+            lastRecoveryWriteMs = now
+            recoveryPoints = persistence.loadRecoveryPoints()
         }
+        if (sessionTracker.observe(state, now)) flightSummaries = persistence.loadFlightSummaries()
     }
 
     Row(Modifier.fillMaxSize().background(GsColors.Ink)) {
@@ -111,32 +104,16 @@ private fun GroundStationV2App(
         Box(Modifier.weight(1f).fillMaxHeight()) {
             when (page) {
                 GsPage.GARAGE -> GsGarageScreen(
-                    state = state,
-                    source = source,
-                    availableSources = availableSources,
-                    onSource = onSource,
-                    onConnect = onConnect,
-                    onDisconnect = onDisconnect,
-                    onRefresh = onRefresh,
-                    onEnterFlight = { page = GsPage.COCKPIT },
-                    onAircraft = { page = GsPage.AIRCRAFT },
-                    onMissions = { page = GsPage.MISSIONS },
-                    onRecords = { page = GsPage.RECORDS }
+                    state, source, availableSources, onSource, onConnect, onDisconnect, onRefresh,
+                    { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS }
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
-                    state = state,
-                    source = source,
-                    heartbeat = heartbeat,
-                    liveVideoFrames = liveVideoFrames,
-                    onSimulatorArm = onSimulatorArm,
-                    onSimulatorTakeOff = onSimulatorTakeOff,
-                    onSimulatorLand = onSimulatorLand,
-                    onSimulatorRecord = onSimulatorRecord,
-                    onGoMissions = { page = GsPage.MISSIONS },
-                    onGoAircraft = { page = GsPage.AIRCRAFT }
+                    state, source, heartbeat, liveVideoFrames,
+                    onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
+                    { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionScreen(state)
-                GsPage.RECORDS -> GsRecordsScreen(state, recoveryPoints)
+                GsPage.RECORDS -> GsRecordsScreen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
                 GsPage.AIRCRAFT -> GsAircraftScreen(state)
                 GsPage.SETTINGS -> GsSettingsScreen()
