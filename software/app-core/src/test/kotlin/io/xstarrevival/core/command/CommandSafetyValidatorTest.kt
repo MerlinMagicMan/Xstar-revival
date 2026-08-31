@@ -90,6 +90,45 @@ class CommandSafetyValidatorTest {
     }
 
     @Test
+    fun `camera mode conflicts and configuration values are validated`() {
+        val recording = healthyState().copy(camera = CameraState(connected = true, mode = "VIDEO", recording = true))
+        val mode = validator.validate(
+            ChangeCameraModeCommand("PHOTO"),
+            recording,
+            setOf(CommandKind.CHANGE_CAMERA_MODE)
+        )
+        val invalidConfiguration = validator.validate(
+            ConfigureCameraCommand(
+                mapOf(
+                    "video_resolution" to "16K",
+                    "frame_rate" to "120",
+                    "histogram" to "sometimes",
+                    "unknown" to "value"
+                )
+            ),
+            healthyState(),
+            setOf(CommandKind.CONFIGURE_CAMERA)
+        )
+        val validConfiguration = validator.validate(
+            ConfigureCameraCommand(
+                mapOf(
+                    "video_resolution" to "4K",
+                    "frame_rate" to "30",
+                    "histogram" to "true"
+                )
+            ),
+            healthyState(),
+            setOf(CommandKind.CONFIGURE_CAMERA)
+        )
+
+        assertFalse(mode.canDispatch)
+        assertTrue(mode.issues.any { it.message.contains("Stop recording") })
+        assertFalse(invalidConfiguration.canDispatch)
+        assertTrue(invalidConfiguration.issues.size >= 4)
+        assertTrue(validConfiguration.canDispatch)
+    }
+
+    @Test
     fun `emergency landing remains available during conflicts and critical warnings`() {
         val airborne = healthyState().copy(
             aircraft = AircraftState(armed = true, flightMode = "FLYING"),

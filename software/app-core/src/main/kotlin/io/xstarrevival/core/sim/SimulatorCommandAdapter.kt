@@ -3,11 +3,13 @@ package io.xstarrevival.core.sim
 import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CancelReturnToHomeCommand
+import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CommandAcknowledgement
 import io.xstarrevival.core.command.CommandCompletion
 import io.xstarrevival.core.command.CommandKind
 import io.xstarrevival.core.command.CommandRequest
 import io.xstarrevival.core.command.CommandTransport
+import io.xstarrevival.core.command.ConfigureCameraCommand
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.EmergencyLandCommand
 import io.xstarrevival.core.command.LandCommand
@@ -15,6 +17,7 @@ import io.xstarrevival.core.command.PauseMissionCommand
 import io.xstarrevival.core.command.RecenterGimbalCommand
 import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.ResumeMissionCommand
+import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartFollowCommand
@@ -50,6 +53,9 @@ class SimulatorCommandAdapter(
         CommandKind.TAKE_PHOTO,
         CommandKind.START_RECORDING,
         CommandKind.STOP_RECORDING,
+        CommandKind.CHANGE_CAMERA_MODE,
+        CommandKind.SET_EXPOSURE,
+        CommandKind.CONFIGURE_CAMERA,
         CommandKind.SET_GIMBAL_PITCH,
         CommandKind.RECENTER_GIMBAL,
         CommandKind.START_WAYPOINT_MISSION,
@@ -74,9 +80,12 @@ class SimulatorCommandAdapter(
             DisarmCommand -> platform.disarm()
             TakeoffCommand -> platform.takeOff()
             LandCommand, EmergencyLandCommand -> platform.land()
-            TakePhotoCommand -> Unit
+            TakePhotoCommand -> platform.takePhoto()
             StartRecordingCommand -> platform.setRecording(true)
             StopRecordingCommand -> platform.setRecording(false)
+            is ChangeCameraModeCommand -> platform.setCameraMode(command.mode)
+            is SetExposureCommand -> platform.setExposure(command.iso, command.shutterSeconds, command.compensationEv)
+            is ConfigureCameraCommand -> platform.configureCamera(command.parameters)
             is SetGimbalPitchCommand -> platform.setGimbalPitch(command.pitchDeg)
             RecenterGimbalCommand -> platform.setGimbalPitch(0.0)
             is StartWaypointMissionCommand -> if (!platform.startMission(command.mission)) {
@@ -149,13 +158,20 @@ class SimulatorCommandAdapter(
             LandCommand, EmergencyLandCommand -> awaitState(request) { it.aircraft.flightMode == "GROUNDED" }
             StartRecordingCommand -> awaitState(request) { it.camera.recording == true }
             StopRecordingCommand -> awaitState(request) { it.camera.recording == false }
+            is ChangeCameraModeCommand -> awaitState(request) { it.camera.mode == command.mode.uppercase() }
+            is SetExposureCommand -> awaitState(request) {
+                it.camera.iso == (command.iso?.toString() ?: "AUTO") &&
+                    it.camera.shutter == (command.shutterSeconds?.toString() ?: "AUTO") &&
+                    (command.compensationEv == null || it.camera.exposureCompensationEv == command.compensationEv)
+            }
+            is ConfigureCameraCommand -> awaitState(request) { state -> cameraConfigurationMatches(state, command.parameters) }
             is SetGimbalPitchCommand -> awaitState(request) { state ->
                 state.gimbal.pitchDeg?.let { kotlin.math.abs(it - command.pitchDeg.coerceIn(-90.0, 30.0)) < 0.01 } == true
             }
             RecenterGimbalCommand -> awaitState(request) {
                 it.gimbal.pitchDeg?.let { pitch -> kotlin.math.abs(pitch) < 0.01 } == true
             }
-            TakePhotoCommand -> CommandCompletion.Completed("Simulator state reconciled for ${command.kind}")
+            TakePhotoCommand -> awaitState(request) { it.camera.photosTaken > 0 }
             is StartWaypointMissionCommand -> awaitMissionTerminal()
             PauseMissionCommand -> awaitMissionPhase(MissionExecutionPhase.PAUSED)
             ResumeMissionCommand -> awaitMissionPhase(MissionExecutionPhase.ACTIVE)
@@ -191,6 +207,22 @@ class SimulatorCommandAdapter(
         }
         return CommandCompletion.Completed("Simulator state reconciled for ${request.command.kind}")
     }
+
+    private fun cameraConfigurationMatches(state: XStarState, parameters: Map<String, String>): Boolean =
+        parameters.all { (key, value) ->
+            when (key) {
+                "white_balance" -> state.camera.whiteBalance == value
+                "photo_resolution" -> state.camera.photoResolution == value
+                "video_resolution" -> state.camera.videoResolution == value
+                "frame_rate" -> state.camera.frameRateFps == value.toIntOrNull()
+                "timer_seconds" -> state.camera.timerSeconds == value.toIntOrNull()
+                "histogram" -> state.camera.histogramEnabled == value.toBooleanStrictOrNull()
+                "overexposure_warning" -> state.camera.overexposureWarningEnabled == value.toBooleanStrictOrNull()
+                "grid" -> state.camera.gridEnabled == value.toBooleanStrictOrNull()
+                "center_point" -> state.camera.centerPointEnabled == value.toBooleanStrictOrNull()
+                else -> false
+            }
+        }
 
     private suspend fun awaitMissionPhase(phase: MissionExecutionPhase): CommandCompletion {
         val state = platform.missionExecution.first { it.phase == phase || it.phase in MISSION_TERMINAL_PHASES }

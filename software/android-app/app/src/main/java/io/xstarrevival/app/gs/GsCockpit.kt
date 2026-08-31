@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,10 +25,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -83,6 +88,10 @@ fun GsCockpitScreen(
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
+    onSimulatorPhoto: () -> Unit,
+    onSimulatorCameraMode: (String) -> Unit,
+    onSimulatorExposure: (Int?, Double?, Double?) -> Unit,
+    onSimulatorCameraConfiguration: (Map<String, String>) -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartRth: () -> Unit,
@@ -114,6 +123,9 @@ fun GsCockpitScreen(
             state = state,
             source = source,
             onRecord = onSimulatorRecord,
+            onPhoto = onSimulatorPhoto,
+            onExposure = { dialog = CockpitDialog.Exposure },
+            onCameraSettings = { dialog = CockpitDialog.Camera },
             commandEnabled = !commandBusy,
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)
         )
@@ -210,11 +222,30 @@ fun GsCockpitScreen(
                 }) { Text("CLOSE") }
             }
         )
+        CockpitDialog.Exposure -> GsExposureDialog(
+            state = state,
+            enabled = source == TelemetrySource.SIMULATOR && !commandBusy,
+            onApply = { iso, shutter, ev ->
+                onSimulatorExposure(iso, shutter, ev)
+                dialog = null
+            },
+            onDismiss = { dialog = null }
+        )
+        CockpitDialog.Camera -> GsCameraSettingsDialog(
+            state = state,
+            enabled = source == TelemetrySource.SIMULATOR && !commandBusy,
+            onMode = onSimulatorCameraMode,
+            onApply = {
+                onSimulatorCameraConfiguration(it)
+                dialog = null
+            },
+            onDismiss = { dialog = null }
+        )
         null -> Unit
     }
 }
 
-private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario, Controls }
+private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario, Controls, Exposure, Camera }
 
 @Composable
 private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideoFrames: Flow<H264VideoFrame>, modifier: Modifier = Modifier) {
@@ -233,6 +264,7 @@ private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideo
             )
             TelemetrySource.MOCK, TelemetrySource.SIMULATOR -> GsArtificialHorizon(state, Modifier.fillMaxSize())
         }
+        GsCameraMonitoringOverlay(state, Modifier.fillMaxSize())
         val message = when {
             source == TelemetrySource.OFFICIAL_AUTEL && liveState.status == LiveVideoStatus.ERROR -> "VIDEO LINK ERROR"
             source == TelemetrySource.OFFICIAL_AUTEL && liveState.status != LiveVideoStatus.PLAYING -> "WAITING FOR LIVE H.264"
@@ -276,6 +308,209 @@ private fun GsArtificialHorizon(state: XStarState, modifier: Modifier = Modifier
             drawLine(Color.White.copy(alpha = .045f), Offset(0f, y), Offset(size.width, y), 1f)
         }
     }
+}
+
+@Composable
+private fun GsCameraMonitoringOverlay(state: XStarState, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        if (state.camera.gridEnabled || state.camera.centerPointEnabled) {
+            Canvas(Modifier.fillMaxSize()) {
+                val overlay = Color.White.copy(alpha = .38f)
+                if (state.camera.gridEnabled) {
+                    repeat(2) { index ->
+                        val fraction = (index + 1) / 3f
+                        drawLine(overlay, Offset(size.width * fraction, 0f), Offset(size.width * fraction, size.height), 1.5f)
+                        drawLine(overlay, Offset(0f, size.height * fraction), Offset(size.width, size.height * fraction), 1.5f)
+                    }
+                }
+                if (state.camera.centerPointEnabled) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    drawCircle(GsColors.Orange, 10f, center, style = Stroke(2f))
+                    drawCircle(GsColors.Orange, 2.5f, center)
+                }
+            }
+        }
+        if (state.camera.histogramEnabled) {
+            Card(
+                Modifier.align(Alignment.BottomStart).padding(start = 222.dp, bottom = 18.dp).size(136.dp, 74.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = .68f))
+            ) {
+                Box(Modifier.fillMaxSize().padding(8.dp)) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val values = listOf(.08f, .18f, .31f, .46f, .67f, .82f, .71f, .55f, .38f, .24f, .13f)
+                        val step = size.width / values.size
+                        values.forEachIndexed { index, value ->
+                            drawRect(
+                                Color.White.copy(alpha = .7f),
+                                topLeft = Offset(index * step, size.height * (1f - value)),
+                                size = Size(step - 2f, size.height * value)
+                            )
+                        }
+                    }
+                    Text("HIST", Modifier.align(Alignment.TopStart), color = GsColors.Muted, fontSize = 7.sp)
+                }
+            }
+        }
+        if (state.camera.overexposureWarningEnabled) {
+            Text(
+                "OVEREXPOSURE MONITOR",
+                Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 92.dp)
+                    .background(Color.Black.copy(alpha = .62f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                color = GsColors.Amber,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun GsExposureDialog(
+    state: XStarState,
+    enabled: Boolean,
+    onApply: (Int?, Double?, Double?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var iso by remember { mutableStateOf(state.camera.iso?.toIntOrNull()) }
+    var shutter by remember { mutableStateOf(state.camera.shutter?.toDoubleOrNull()) }
+    var ev by remember { mutableFloatStateOf((state.camera.exposureCompensationEv ?: 0.0).toFloat()) }
+    val isoOptions = listOf<Int?>(null, 100, 200, 400, 800, 1600)
+    val shutterOptions = listOf<Double?>(null, .000125, .001, .004, .008, .016667, .033333)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("CAMERA EXPOSURE") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CameraChoiceRow("ISO", isoOptions, iso, { it?.toString() ?: "AUTO" }) { iso = it }
+                CameraChoiceRow("SHUTTER", shutterOptions, shutter, { formatShutter(it) }) { shutter = it }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Exposure compensation")
+                    Text("%+.1f EV".format(ev), color = GsColors.Orange, fontFamily = FontFamily.Monospace)
+                }
+                Slider(value = ev, onValueChange = { ev = it }, valueRange = -3f..3f, steps = 11)
+                GsSettingLine("Mode", if (iso == null && shutter == null) "Auto + EV" else "Manual")
+                if (!enabled) Text("Camera writes are available only in the isolated simulator.", color = GsColors.Amber, fontSize = 10.sp)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
+        confirmButton = {
+            Button(onClick = { onApply(iso, shutter, ev.toDouble()) }, enabled = enabled) { Text("APPLY") }
+        }
+    )
+}
+
+@Composable
+private fun GsCameraSettingsDialog(
+    state: XStarState,
+    enabled: Boolean,
+    onMode: (String) -> Unit,
+    onApply: (Map<String, String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var mode by remember { mutableStateOf(state.camera.mode ?: "VIDEO") }
+    var whiteBalance by remember { mutableStateOf(state.camera.whiteBalance ?: "AUTO") }
+    var photoResolution by remember { mutableStateOf(state.camera.photoResolution ?: "12 MP") }
+    var videoResolution by remember { mutableStateOf(state.camera.videoResolution ?: "4K") }
+    var frameRate by remember { mutableIntStateOf(state.camera.frameRateFps ?: 30) }
+    var timer by remember { mutableIntStateOf(state.camera.timerSeconds ?: 0) }
+    var histogram by remember { mutableStateOf(state.camera.histogramEnabled) }
+    var overexposure by remember { mutableStateOf(state.camera.overexposureWarningEnabled) }
+    var grid by remember { mutableStateOf(state.camera.gridEnabled) }
+    var centerPoint by remember { mutableStateOf(state.camera.centerPointEnabled) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("CAMERA SETTINGS") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    GsSettingLine("Storage remaining", state.camera.storageRemainingMb?.let { "%.1f GB".format(it / 1024.0) } ?: "Unavailable")
+                    GsSettingLine("Photos captured", state.camera.photosTaken.toString())
+                }
+                item {
+                    CameraChoiceRow("CAPTURE MODE", listOf("PHOTO", "VIDEO"), mode, { it }) {
+                        mode = it
+                        if (enabled) onMode(it)
+                    }
+                }
+                item { CameraChoiceRow("WHITE BALANCE", listOf("AUTO", "SUNNY", "CLOUDY", "INCANDESCENT", "FLUORESCENT"), whiteBalance, { it }) { whiteBalance = it } }
+                item { CameraChoiceRow("PHOTO", listOf("12 MP", "8 MP", "5 MP"), photoResolution, { it }) { photoResolution = it } }
+                item { CameraChoiceRow("VIDEO", listOf("4K", "2.7K", "1080P"), videoResolution, { it }) { videoResolution = it } }
+                item { CameraChoiceRow("FRAME RATE", listOf(24, 30, 60), frameRate, { "$it FPS" }) { frameRate = it } }
+                item { CameraChoiceRow("TIMER", listOf(0, 3, 5, 10), timer, { if (it == 0) "OFF" else "${it}s" }) { timer = it } }
+                item { CameraToggle("Histogram", histogram) { histogram = it } }
+                item { CameraToggle("Overexposure warning", overexposure) { overexposure = it } }
+                item { CameraToggle("Rule-of-thirds grid", grid) { grid = it } }
+                item { CameraToggle("Center point", centerPoint) { centerPoint = it } }
+                if (!enabled) item {
+                    Text("Camera writes are available only in the isolated simulator.", color = GsColors.Amber, fontSize = 10.sp)
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
+        confirmButton = {
+            Button(
+                enabled = enabled,
+                onClick = {
+                    onApply(mapOf(
+                        "white_balance" to whiteBalance,
+                        "photo_resolution" to photoResolution,
+                        "video_resolution" to videoResolution,
+                        "frame_rate" to frameRate.toString(),
+                        "timer_seconds" to timer.toString(),
+                        "histogram" to histogram.toString(),
+                        "overexposure_warning" to overexposure.toString(),
+                        "grid" to grid.toString(),
+                        "center_point" to centerPoint.toString()
+                    ))
+                }
+            ) { Text("APPLY") }
+        }
+    )
+}
+
+@Composable
+private fun <T> CameraChoiceRow(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(title, color = GsColors.Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            options.forEach { option ->
+                Card(
+                    Modifier.weight(1f).clickable { onSelect(option) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (option == selected) GsColors.Orange.copy(alpha = .22f) else GsColors.Panel2
+                    )
+                ) {
+                    Text(
+                        label(option),
+                        Modifier.align(Alignment.CenterHorizontally).padding(horizontal = 4.dp, vertical = 8.dp),
+                        color = if (option == selected) GsColors.Orange else GsColors.White,
+                        fontSize = 8.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraToggle(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = GsColors.White)
+        Switch(checked = checked, onCheckedChange = onChecked)
+    }
+}
+
+private fun formatShutter(seconds: Double?): String = when (seconds) {
+    null -> "AUTO"
+    else -> if (seconds >= 1.0) "${seconds}s" else "1/${(1.0 / seconds).roundToInt()}"
 }
 
 @Composable
@@ -343,6 +578,9 @@ private fun GsCameraRail(
     state: XStarState,
     source: TelemetrySource,
     onRecord: () -> Unit,
+    onPhoto: () -> Unit,
+    onExposure: () -> Unit,
+    onCameraSettings: () -> Unit,
     commandEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -353,10 +591,10 @@ private fun GsCameraRail(
             onClick = if (source == TelemetrySource.SIMULATOR && commandEnabled) onRecord else ({ }),
             accent = if (state.camera.recording == true) GsColors.Red else GsColors.Orange
         )
-        GsRailButton("◉", "PHOTO") { }
-        GsRailButton("EV", state.camera.exposureMode ?: "AUTO") { }
+        GsRailButton("◉", "PHOTO", if (source == TelemetrySource.SIMULATOR && commandEnabled) onPhoto else ({ }))
+        GsRailButton("EV", state.camera.exposureCompensationEv?.let { "%+.1f".format(it) } ?: "AUTO", onExposure)
         GsRailButton("↕", state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL") { }
-        GsRailButton("⚙", "CAM") { }
+        GsRailButton("⚙", state.camera.mode ?: "CAM", onCameraSettings)
     }
 }
 

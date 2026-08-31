@@ -65,6 +65,8 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
+                    vm::takeSimulatorPhoto, vm::setSimulatorCameraMode,
+                    vm::setSimulatorExposure, vm::configureSimulatorCamera,
                     vm::setSimulatorScenario, vm::setSimulatorControls,
                     vm::startSimulatorMission, vm::pauseSimulatorMission,
                     vm::resumeSimulatorMission, vm::abortSimulatorMission,
@@ -98,6 +100,10 @@ private fun GroundStationV2App(
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
     onSimulatorRecord: () -> Unit,
+    onSimulatorPhoto: () -> Unit,
+    onSimulatorCameraMode: (String) -> Unit,
+    onSimulatorExposure: (Int?, Double?, Double?) -> Unit,
+    onSimulatorCameraConfiguration: (Map<String, String>) -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartMission: (MissionPlan) -> Unit,
@@ -151,6 +157,7 @@ private fun GroundStationV2App(
                 GsPage.COCKPIT -> GsCockpitScreen(
                     state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
+                    onSimulatorPhoto, onSimulatorCameraMode, onSimulatorExposure, onSimulatorCameraConfiguration,
                     onSimulatorScenario, onSimulatorControls, onStartRth, onCancelRth,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )

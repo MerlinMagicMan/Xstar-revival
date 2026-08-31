@@ -188,22 +188,66 @@ class CommandSafetyValidator {
     private fun validateCamera(state: XStarState, command: CameraCommand, issues: MutableList<CommandIssue>) {
         if (state.camera.connected != true) issues += blocking("Camera is not connected")
         when (command) {
-            StartRecordingCommand -> if (state.camera.recording == true) issues += blocking("Camera is already recording")
+            StartRecordingCommand -> {
+                if (state.camera.recording == true) issues += blocking("Camera is already recording")
+                if (state.camera.mode != null && state.camera.mode != "VIDEO") issues += blocking("Camera must be in video mode")
+            }
             StopRecordingCommand -> if (state.camera.recording != true) issues += blocking("Camera is not recording")
-            is ChangeCameraModeCommand -> if (command.mode.isBlank()) issues += blocking("Camera mode is required")
+            is ChangeCameraModeCommand -> {
+                if (command.mode.uppercase() !in setOf("PHOTO", "VIDEO")) issues += blocking("Camera mode must be PHOTO or VIDEO")
+                if (state.camera.recording == true) issues += blocking("Stop recording before changing camera mode")
+            }
             is SetExposureCommand -> {
                 if (command.iso != null && command.iso !in 50..25_600) issues += blocking("ISO is outside the supported range")
                 if (command.shutterSeconds != null && command.shutterSeconds !in 0.000_125..30.0) issues += blocking("Shutter time is outside the supported range")
                 if (command.compensationEv != null && command.compensationEv !in -5.0..5.0) issues += blocking("Exposure compensation is outside the supported range")
             }
-            is ConfigureCameraCommand -> if (command.parameters.isEmpty()) issues += blocking("Camera configuration is empty")
-            TakePhotoCommand -> Unit
+            is ConfigureCameraCommand -> validateCameraConfiguration(command.parameters, issues)
+            TakePhotoCommand -> if (state.camera.recording == true) issues += blocking("Stop recording before taking a photo")
+        }
+    }
+
+    private fun validateCameraConfiguration(parameters: Map<String, String>, issues: MutableList<CommandIssue>) {
+        if (parameters.isEmpty()) {
+            issues += blocking("Camera configuration is empty")
+            return
+        }
+        parameters.keys.filterNot { it in CAMERA_CONFIGURATION_KEYS }.forEach {
+            issues += blocking("Unsupported camera configuration: $it")
+        }
+        parameters["white_balance"]?.let {
+            if (it !in setOf("AUTO", "SUNNY", "CLOUDY", "INCANDESCENT", "FLUORESCENT")) {
+                issues += blocking("White balance is not supported")
+            }
+        }
+        parameters["photo_resolution"]?.let {
+            if (it !in setOf("12 MP", "8 MP", "5 MP")) issues += blocking("Photo resolution is not supported")
+        }
+        parameters["video_resolution"]?.let {
+            if (it !in setOf("4K", "2.7K", "1080P")) issues += blocking("Video resolution is not supported")
+        }
+        parameters["frame_rate"]?.let {
+            if (it.toIntOrNull() !in setOf(24, 30, 60)) issues += blocking("Frame rate is not supported")
+        }
+        parameters["timer_seconds"]?.let {
+            if (it.toIntOrNull() !in setOf(0, 3, 5, 10)) issues += blocking("Camera timer is not supported")
+        }
+        parameters.filterKeys { it in CAMERA_BOOLEAN_KEYS }.forEach { (key, value) ->
+            if (value.toBooleanStrictOrNull() == null) issues += blocking("$key must be true or false")
         }
     }
 
     private fun blocking(message: String) = CommandIssue(CommandIssueSeverity.BLOCKING, message)
 
     private companion object {
+        val CAMERA_BOOLEAN_KEYS = setOf("histogram", "overexposure_warning", "grid", "center_point")
+        val CAMERA_CONFIGURATION_KEYS = CAMERA_BOOLEAN_KEYS + setOf(
+            "white_balance",
+            "photo_resolution",
+            "video_resolution",
+            "frame_rate",
+            "timer_seconds"
+        )
         val EXCLUSIVE_FLIGHT_COMMANDS = setOf(
             CommandKind.TAKEOFF,
             CommandKind.LAND,

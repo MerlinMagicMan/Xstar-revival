@@ -146,6 +146,26 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun takePhoto() {
+        snapshot = SimulatorFlightModel.takePhoto(snapshot)
+        publish()
+    }
+
+    fun setCameraMode(mode: String) {
+        snapshot = SimulatorFlightModel.setCameraMode(snapshot, mode)
+        publish()
+    }
+
+    fun setExposure(iso: Int?, shutterSeconds: Double?, compensationEv: Double?) {
+        snapshot = SimulatorFlightModel.setExposure(snapshot, iso, shutterSeconds, compensationEv)
+        publish()
+    }
+
+    fun configureCamera(parameters: Map<String, String>) {
+        snapshot = SimulatorFlightModel.configureCamera(snapshot, parameters)
+        publish()
+    }
+
     fun setGimbalPitch(pitchDeg: Double) {
         snapshot = SimulatorFlightModel.setGimbalPitch(snapshot, pitchDeg)
         publish()

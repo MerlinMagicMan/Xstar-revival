@@ -76,7 +76,14 @@ object XStarReducer {
                     recording = event.recording ?: state.camera.recording,
                     exposureMode = event.exposureMode ?: state.camera.exposureMode,
                     iso = event.iso ?: state.camera.iso,
-                    shutter = event.shutter ?: state.camera.shutter
+                    shutter = event.shutter ?: state.camera.shutter,
+                    exposureCompensationEv = event.exposureCompensationEv ?: state.camera.exposureCompensationEv,
+                    whiteBalance = event.whiteBalance ?: state.camera.whiteBalance,
+                    photoResolution = event.photoResolution ?: state.camera.photoResolution,
+                    videoResolution = event.videoResolution ?: state.camera.videoResolution,
+                    frameRateFps = event.frameRateFps ?: state.camera.frameRateFps,
+                    timerSeconds = event.timerSeconds ?: state.camera.timerSeconds,
+                    storageRemainingMb = event.storageRemainingMb ?: state.camera.storageRemainingMb
                 )
             )
             is XStarEvent.GimbalSnapshot -> state.copy(

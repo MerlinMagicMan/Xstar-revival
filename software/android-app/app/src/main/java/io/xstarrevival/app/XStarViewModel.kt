@@ -11,13 +11,16 @@ import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.command.ArmCommand
 import io.xstarrevival.core.command.AbortMissionCommand
 import io.xstarrevival.core.command.CancelReturnToHomeCommand
+import io.xstarrevival.core.command.ChangeCameraModeCommand
 import io.xstarrevival.core.command.CommandDispatcher
 import io.xstarrevival.core.command.CommandStatus
+import io.xstarrevival.core.command.ConfigureCameraCommand
 import io.xstarrevival.core.command.DisarmCommand
 import io.xstarrevival.core.command.LandCommand
 import io.xstarrevival.core.command.PauseMissionCommand
 import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.ReturnToHomeCommand
+import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StartCourseLockCommand
@@ -29,6 +32,7 @@ import io.xstarrevival.core.command.StopFollowCommand
 import io.xstarrevival.core.command.StopHomeLockCommand
 import io.xstarrevival.core.command.StopOrbitCommand
 import io.xstarrevival.core.command.StopRecordingCommand
+import io.xstarrevival.core.command.TakePhotoCommand
 import io.xstarrevival.core.command.TakeoffCommand
 import io.xstarrevival.core.mock.MockXStarPlatform
 import io.xstarrevival.core.groundstation.MissionExecutionState
@@ -319,6 +323,28 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         simulatorCommands.dispatch(
             if (simulatorPlatform.state.value.camera.recording == true) StopRecordingCommand else StartRecordingCommand
         )
+    }
+
+    fun takeSimulatorPhoto() {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(TakePhotoCommand)
+    }
+
+    fun setSimulatorCameraMode(mode: String) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(ChangeCameraModeCommand(mode))
+        }
+    }
+
+    fun setSimulatorExposure(iso: Int?, shutterSeconds: Double?, compensationEv: Double?) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(SetExposureCommand(iso, shutterSeconds, compensationEv))
+        }
+    }
+
+    fun configureSimulatorCamera(parameters: Map<String, String>) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(ConfigureCameraCommand(parameters))
+        }
     }
 
     fun startBenchCapture() {
