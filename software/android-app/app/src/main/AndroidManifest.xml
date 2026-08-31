@@ -9,7 +9,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.XStarRevival">
         <activity
-            android:name=".GroundStationActivity"
+            android:name=".GroundStationV2Activity"
             android:screenOrientation="landscape"
             android:exported="true">
             <intent-filter>
