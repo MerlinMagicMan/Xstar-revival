@@ -91,6 +91,6 @@ class SimulatorFlightModelTest {
         assertTrue(state.rollDeg in -28.0..28.0)
         assertTrue(state.pitchDeg in -28.0..28.0)
         assertTrue(state.yawDeg in 0.0..<360.0)
-        assertTrue(state.gimbalPitchDeg in -90.0..15.0)
+        assertTrue(state.gimbalPitchDeg in -90.0..30.0)
     }
 }

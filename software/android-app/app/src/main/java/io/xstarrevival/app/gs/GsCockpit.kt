@@ -46,6 +46,9 @@ import io.xstarrevival.app.LiveVideoUiState
 import io.xstarrevival.app.TelemetrySource
 import io.xstarrevival.app.VideoReplayStatus
 import io.xstarrevival.app.VideoReplayUiState
+import io.xstarrevival.core.command.CommandPhase
+import io.xstarrevival.core.command.CommandStatus
+import io.xstarrevival.core.command.isTerminal
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.video.H264VideoFrame
@@ -57,6 +60,7 @@ fun GsCockpitScreen(
     state: XStarState,
     source: TelemetrySource,
     heartbeat: HeartbeatUiState,
+    commandStatus: CommandStatus?,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSimulatorArm: () -> Unit,
     onSimulatorTakeOff: () -> Unit,
@@ -66,6 +70,9 @@ fun GsCockpitScreen(
     onGoAircraft: () -> Unit
 ) {
     var dialog by remember { mutableStateOf<CockpitDialog?>(null) }
+    val commandBusy = source == TelemetrySource.SIMULATOR && commandStatus?.phase?.isTerminal == false
+    val grounded = (state.navigation.altitudeM ?: 0.0) <= 0.2
+    val airborne = state.aircraft.armed == true && !grounded
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         GsVideoSurface(state, source, liveVideoFrames, Modifier.fillMaxSize())
         GsTopTelemetry(state, source, heartbeat, Modifier.align(Alignment.TopCenter))
@@ -81,6 +88,7 @@ fun GsCockpitScreen(
             state = state,
             source = source,
             onRecord = onSimulatorRecord,
+            commandEnabled = !commandBusy,
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)
         )
         GsMiniMap(state, Modifier.align(Alignment.BottomStart).padding(18.dp), onClick = onGoMissions)
@@ -90,9 +98,14 @@ fun GsCockpitScreen(
                 Modifier.align(Alignment.BottomEnd).padding(18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(onClick = onSimulatorArm) { Text(if (state.aircraft.armed == true) "DISARM" else "ARM") }
-                Button(onClick = onSimulatorTakeOff) { Text("TAKEOFF") }
-                OutlinedButton(onClick = onSimulatorLand) { Text("LAND") }
+                OutlinedButton(onClick = onSimulatorArm, enabled = !commandBusy && grounded) {
+                    Text(if (state.aircraft.armed == true) "DISARM" else "ARM")
+                }
+                Button(onClick = onSimulatorTakeOff, enabled = !commandBusy && grounded) { Text("TAKEOFF") }
+                OutlinedButton(onClick = onSimulatorLand, enabled = !commandBusy && airborne) { Text("LAND") }
+            }
+            commandStatus?.let {
+                GsCommandStatusPill(it, Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 58.dp))
             }
         }
         if (state.warnings.isNotEmpty()) {
@@ -153,7 +166,7 @@ private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideo
             source == TelemetrySource.OFFICIAL_AUTEL && liveState.status != LiveVideoStatus.PLAYING -> "WAITING FOR LIVE H.264"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status == VideoReplayStatus.ERROR -> "REPLAY VIDEO ERROR"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status != VideoReplayStatus.PLAYING -> "WAITING FOR REPLAY VIDEO"
-            source == TelemetrySource.SIMULATOR -> "SIMULATION — NO AIRCRAFT COMMAND PATH"
+            source == TelemetrySource.SIMULATOR -> "SIMULATION — VALIDATED LOCAL COMMANDS"
             source == TelemetrySource.MOCK -> "MOCK TELEMETRY"
             else -> null
         }
@@ -244,18 +257,52 @@ private fun GsFlightRail(
 }
 
 @Composable
-private fun GsCameraRail(state: XStarState, source: TelemetrySource, onRecord: () -> Unit, modifier: Modifier = Modifier) {
+private fun GsCameraRail(
+    state: XStarState,
+    source: TelemetrySource,
+    onRecord: () -> Unit,
+    commandEnabled: Boolean,
+    modifier: Modifier = Modifier
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         GsRailButton(
             glyph = if (state.camera.recording == true) "■" else "●",
             label = if (state.camera.recording == true) "STOP" else "REC",
-            onClick = if (source == TelemetrySource.SIMULATOR) onRecord else ({ }),
+            onClick = if (source == TelemetrySource.SIMULATOR && commandEnabled) onRecord else ({ }),
             accent = if (state.camera.recording == true) GsColors.Red else GsColors.Orange
         )
         GsRailButton("◉", "PHOTO") { }
         GsRailButton("EV", state.camera.exposureMode ?: "AUTO") { }
         GsRailButton("↕", state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL") { }
         GsRailButton("⚙", "CAM") { }
+    }
+}
+
+@Composable
+private fun GsCommandStatusPill(status: CommandStatus, modifier: Modifier = Modifier) {
+    val color = when (status.phase) {
+        CommandPhase.COMPLETED -> GsColors.Green
+        CommandPhase.REJECTED, CommandPhase.FAILED, CommandPhase.TIMED_OUT,
+        CommandPhase.CANCELLED, CommandPhase.UNSUPPORTED -> GsColors.Red
+        else -> GsColors.Orange
+    }
+    Card(
+        modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = .84f)),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) {
+            Text(
+                "${status.request.command.kind.name.replace('_', ' ')} · ${status.phase.name}",
+                color = color,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            status.detail?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = GsColors.Muted, fontSize = 9.sp)
+            }
+        }
     }
 }
 
