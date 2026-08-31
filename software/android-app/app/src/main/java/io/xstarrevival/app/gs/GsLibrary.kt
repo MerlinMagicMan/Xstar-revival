@@ -37,11 +37,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
+import java.text.DateFormat
+import java.util.Date
+import kotlin.math.max
 
 enum class RecordTab { FLIGHTS, FIND_AIRCRAFT }
 
 @Composable
-fun GsRecordsScreen(state: XStarState, recoveryPoints: List<RecoveryPoint> = emptyList()) {
+fun GsRecordsScreen(
+    state: XStarState,
+    recoveryPoints: List<RecoveryPoint> = emptyList(),
+    flightSummaries: List<PersistedFlightSummary> = emptyList()
+) {
     var tab by remember { mutableStateOf(RecordTab.FLIGHTS) }
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -57,25 +64,36 @@ fun GsRecordsScreen(state: XStarState, recoveryPoints: List<RecoveryPoint> = emp
             }
         }
         Spacer(Modifier.height(16.dp))
-        if (tab == RecordTab.FLIGHTS) FlightList(Modifier.weight(1f))
+        if (tab == RecordTab.FLIGHTS) FlightList(flightSummaries, Modifier.weight(1f))
         else FindAircraftPanel(state, recoveryPoints, Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun FlightList(modifier: Modifier = Modifier) {
-    val records = listOf(
-        "Today · 12:41 PM" to "14:22 · 2.1 km · 84 m · 82→39%",
-        "Aug 30 · 6:18 PM" to "08:47 · 1.0 km · 52 m · 91→64%",
-        "Aug 29 · 10:03 AM" to "21:11 · 3.8 km · 101 m · 96→31%"
-    )
+private fun FlightList(records: List<PersistedFlightSummary>, modifier: Modifier = Modifier) {
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(records) { (title, detail) ->
+        if (records.isEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
+                    Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("NO RECORDED FLIGHTS YET", color = GsColors.White, fontWeight = FontWeight.Bold)
+                        Text("A flight record is created automatically when telemetry indicates the aircraft becomes airborne or armed.", color = GsColors.Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        items(records) { record ->
+            val durationSeconds = max(0L, (record.endedAtEpochMs - record.startedAtEpochMs) / 1000L)
+            val duration = "%02d:%02d".format(durationSeconds / 60L, durationSeconds % 60L)
+            val battery = when {
+                record.batteryStartPercent != null && record.batteryEndPercent != null -> "${record.batteryStartPercent}→${record.batteryEndPercent}%"
+                else -> "battery —"
+            }
             Card(colors = CardDefaults.cardColors(containerColor = GsColors.Panel)) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text(title, color = GsColors.White, fontWeight = FontWeight.Bold)
-                        Text(detail, color = GsColors.Muted)
+                        Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(record.startedAtEpochMs)), color = GsColors.White, fontWeight = FontWeight.Bold)
+                        Text("$duration · max ${record.maximumAltitudeM?.let { "%.1f m".format(it) } ?: "—"} · ${record.maximumSpeedMps?.let { "%.1f m/s".format(it) } ?: "—"} · $battery", color = GsColors.Muted)
                     }
                     Text("›", color = GsColors.Orange, fontSize = 28.sp)
                 }
