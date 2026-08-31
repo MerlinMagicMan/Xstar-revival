@@ -25,6 +25,7 @@ import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
 import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.sim.SimulatorCommandAdapter
+import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.sim.SimulatorXStarPlatform
 import io.xstarrevival.core.video.H264VideoFrame
 import io.xstarrevival.core.video.H264CaptureStopReason
@@ -116,6 +117,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     val replayState: StateFlow<CaptureReplayState> = replayTransport.playback
     val commandStatus: StateFlow<CommandStatus?> = simulatorCommands.latest
+    val simulatorScenario: StateFlow<SimulatorScenario> = simulatorPlatform.scenario
 
     private val mutableHeartbeat = MutableStateFlow(HeartbeatUiState())
     val heartbeat: StateFlow<HeartbeatUiState> = mutableHeartbeat.asStateFlow()
@@ -198,6 +200,10 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSimulatorControls(input: SimulatorControlInput) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setControls(input)
+    }
+
+    fun setSimulatorScenario(value: SimulatorScenario) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setScenario(value)
     }
 
     fun toggleSimulatorArm() {

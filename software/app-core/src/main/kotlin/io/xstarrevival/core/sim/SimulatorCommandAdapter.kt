@@ -15,6 +15,8 @@ import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StopRecordingCommand
 import io.xstarrevival.core.command.TakePhotoCommand
 import io.xstarrevival.core.command.TakeoffCommand
+import io.xstarrevival.core.model.ConnectionState
+import io.xstarrevival.core.model.XStarState
 import kotlinx.coroutines.flow.first
 
 /** Command transport for the isolated software simulator only. It has no live platform dependency. */
@@ -53,20 +55,43 @@ class SimulatorCommandAdapter(
 
     override suspend fun awaitCompletion(request: CommandRequest): CommandCompletion {
         val command = request.command
-        when (command) {
-            ArmCommand -> platform.state.first { it.aircraft.armed == true && it.aircraft.flightMode == "ARMED" }
-            DisarmCommand -> platform.state.first { it.aircraft.armed == false }
-            TakeoffCommand -> platform.state.first { it.aircraft.flightMode == "FLYING" }
-            LandCommand, EmergencyLandCommand -> platform.state.first { it.aircraft.flightMode == "GROUNDED" }
-            StartRecordingCommand -> platform.state.first { it.camera.recording == true }
-            StopRecordingCommand -> platform.state.first { it.camera.recording == false }
-            is SetGimbalPitchCommand -> platform.state.first { state ->
+        return when (command) {
+            ArmCommand -> awaitState(request) { it.aircraft.armed == true && it.aircraft.flightMode == "ARMED" }
+            DisarmCommand -> awaitState(request) { it.aircraft.armed == false }
+            TakeoffCommand -> awaitState(request) { it.aircraft.flightMode == "FLYING" }
+            LandCommand, EmergencyLandCommand -> awaitState(request) { it.aircraft.flightMode == "GROUNDED" }
+            StartRecordingCommand -> awaitState(request) { it.camera.recording == true }
+            StopRecordingCommand -> awaitState(request) { it.camera.recording == false }
+            is SetGimbalPitchCommand -> awaitState(request) { state ->
                 state.gimbal.pitchDeg?.let { kotlin.math.abs(it - command.pitchDeg.coerceIn(-90.0, 30.0)) < 0.01 } == true
             }
-            RecenterGimbalCommand -> platform.state.first { it.gimbal.pitchDeg?.let { pitch -> kotlin.math.abs(pitch) < 0.01 } == true }
-            TakePhotoCommand -> Unit
-            else -> return CommandCompletion.Failed("${command.kind} has no simulator completion rule")
+            RecenterGimbalCommand -> awaitState(request) {
+                it.gimbal.pitchDeg?.let { pitch -> kotlin.math.abs(pitch) < 0.01 } == true
+            }
+            TakePhotoCommand -> CommandCompletion.Completed("Simulator state reconciled for ${command.kind}")
+            else -> CommandCompletion.Failed("${command.kind} has no simulator completion rule")
         }
-        return CommandCompletion.Completed("Simulator state reconciled for ${command.kind}")
+    }
+
+    private suspend fun awaitState(
+        request: CommandRequest,
+        reconciled: (XStarState) -> Boolean
+    ): CommandCompletion {
+        val state = platform.state.first { current ->
+            current.connection !is ConnectionState.Connected ||
+                (request.command.kind in FLIGHT_START_COMMANDS && current.warnings.any { it.id == "sim-forced-landing" }) ||
+                reconciled(current)
+        }
+        if (state.connection !is ConnectionState.Connected) {
+            return CommandCompletion.Failed("Simulator aircraft link was lost before state reconciliation")
+        }
+        if (request.command.kind in FLIGHT_START_COMMANDS && state.warnings.any { it.id == "sim-forced-landing" }) {
+            return CommandCompletion.Failed("Simulator forced landing interrupted ${request.command.kind}")
+        }
+        return CommandCompletion.Completed("Simulator state reconciled for ${request.command.kind}")
+    }
+
+    private companion object {
+        val FLIGHT_START_COMMANDS = setOf(CommandKind.ARM, CommandKind.TAKEOFF)
     }
 }

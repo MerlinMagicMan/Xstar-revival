@@ -23,15 +23,20 @@ class SimulatorXStarPlatform(
 
     private val mutableState = MutableStateFlow(XStarState())
     override val state: StateFlow<XStarState> = mutableState.asStateFlow()
+    private val mutableScenario = MutableStateFlow(SimulatorScenario.NORMAL_FLIGHT)
+    val scenario: StateFlow<SimulatorScenario> = mutableScenario.asStateFlow()
 
     private var snapshot = SimulatorSnapshot()
     private var input = SimulatorControlInput()
     private var ticker: Job? = null
+    private var frozenLinkLossState: XStarState? = null
 
     override suspend fun connect() {
         ticker?.cancel()
         snapshot = SimulatorSnapshot()
         input = SimulatorControlInput()
+        frozenLinkLossState = null
+        mutableScenario.value = SimulatorScenario.NORMAL_FLIGHT
         publish()
         ticker = scope.launch {
             while (isActive) {
@@ -46,6 +51,7 @@ class SimulatorXStarPlatform(
         ticker?.cancel()
         ticker = null
         input = SimulatorControlInput()
+        frozenLinkLossState = null
         mutableState.value = XStarState(connection = ConnectionState.Disconnected)
     }
 
@@ -95,7 +101,31 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun setScenario(value: SimulatorScenario) {
+        if (value == mutableScenario.value) return
+        frozenLinkLossState = if (value in LINK_LOSS_SCENARIOS) {
+            SimulatorFlightModel.toXStarState(snapshot)
+        } else {
+            null
+        }
+        mutableScenario.value = value
+        if (value == SimulatorScenario.FORCED_LANDING) {
+            snapshot = SimulatorFlightModel.land(snapshot)
+        }
+        publish()
+    }
+
     private fun publish() {
-        mutableState.value = SimulatorFlightModel.toXStarState(snapshot)
+        mutableState.value = SimulatorScenarioApplier.apply(
+            frozenLinkLossState ?: SimulatorFlightModel.toXStarState(snapshot),
+            mutableScenario.value
+        )
+    }
+
+    private companion object {
+        val LINK_LOSS_SCENARIOS = setOf(
+            SimulatorScenario.COMPLETE_LINK_LOSS,
+            SimulatorScenario.CONNECTION_LOSS_DURING_MISSION
+        )
     }
 }
