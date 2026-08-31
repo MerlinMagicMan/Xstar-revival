@@ -21,16 +21,18 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 enum class GsSettingsFamily(val title: String, val subtitle: String) {
     FLIGHT("Flight Control", "Limits, RTH, Beginner Mode, ATTI and IOC"),
@@ -43,7 +45,17 @@ enum class GsSettingsFamily(val title: String, val subtitle: String) {
 
 @Composable
 fun GsSettingsV2Screen() {
+    val context = LocalContext.current
+    val store = remember(context) { GsSettingsStore(context.applicationContext) }
     var selected by remember { mutableStateOf(GsSettingsFamily.FLIGHT) }
+    var settings by remember(store) { mutableStateOf(store.load()) }
+    val update: (GsUserSettings) -> Unit = { next ->
+        settings = next.normalized()
+    }
+    LaunchedEffect(settings) {
+        delay(250L)
+        store.save(settings)
+    }
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.width(290.dp).fillMaxHeight()) {
             Text("SETTINGS", color = GsColors.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
@@ -69,12 +81,12 @@ fun GsSettingsV2Screen() {
                 Text(selected.title.uppercase(), color = GsColors.Orange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(14.dp))
                 when (selected) {
-                    GsSettingsFamily.FLIGHT -> FlightControlSettings()
-                    GsSettingsFamily.REMOTE -> RemoteSettings()
-                    GsSettingsFamily.VIDEO -> VideoLinkSettings()
-                    GsSettingsFamily.BATTERY -> BatterySettings()
-                    GsSettingsFamily.GIMBAL -> GimbalSettings()
-                    GsSettingsFamily.GENERAL -> GeneralSettings()
+                    GsSettingsFamily.FLIGHT -> FlightControlSettings(settings, update)
+                    GsSettingsFamily.REMOTE -> RemoteSettings(settings, update)
+                    GsSettingsFamily.VIDEO -> VideoLinkSettings(settings, update)
+                    GsSettingsFamily.BATTERY -> BatterySettings(settings, update)
+                    GsSettingsFamily.GIMBAL -> GimbalSettings(settings, update)
+                    GsSettingsFamily.GENERAL -> GeneralSettings(settings, update)
                 }
             }
         }
@@ -82,48 +94,37 @@ fun GsSettingsV2Screen() {
 }
 
 @Composable
-private fun FlightControlSettings() {
-    var beginner by remember { mutableStateOf(false) }
-    var maxAltitude by remember { mutableFloatStateOf(120f) }
-    var maxDistance by remember { mutableFloatStateOf(500f) }
-    var rthAltitude by remember { mutableFloatStateOf(60f) }
-    var atti by remember { mutableStateOf(false) }
-    var ioc by remember { mutableStateOf(true) }
-    SettingsToggle("Beginner Mode", "Restricts speed, altitude and radius", beginner) { beginner = it }
-    SettingsSlider("Maximum altitude", maxAltitude, 30f..500f, "m") { maxAltitude = it }
-    SettingsSlider("Maximum distance", maxDistance, 50f..3000f, "m") { maxDistance = it }
-    SettingsSlider("Return-to-Home altitude", rthAltitude, 20f..150f, "m") { rthAltitude = it }
-    SettingsToggle("Allow ATTI mode", "Enable only after pilot understands GPS-free flight behavior", atti) { atti = it }
-    SettingsToggle("IOC / intelligent orientation", "Exposes Course Lock and Home Lock when supported", ioc) { ioc = it }
+private fun FlightControlSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsToggle("Beginner Mode", "Restricts speed, altitude and radius", settings.beginnerMode) { update(settings.copy(beginnerMode = it)) }
+    SettingsSlider("Maximum altitude", settings.maximumAltitudeM, 30f..500f, "m") { update(settings.copy(maximumAltitudeM = it)) }
+    SettingsSlider("Maximum distance", settings.maximumDistanceM, 50f..3000f, "m") { update(settings.copy(maximumDistanceM = it)) }
+    SettingsSlider("Return-to-Home altitude", settings.rthAltitudeM, 20f..150f, "m") { update(settings.copy(rthAltitudeM = it)) }
+    SettingsToggle("Allow ATTI mode", "Enable only after pilot understands GPS-free flight behavior", settings.allowAttiMode) { update(settings.copy(allowAttiMode = it)) }
+    SettingsToggle("IOC / intelligent orientation", "Exposes Course Lock and Home Lock when supported", settings.iocEnabled) { update(settings.copy(iocEnabled = it)) }
     SafetyNote("Live parameter writes remain disabled until each Autel command and acknowledgement path is verified. These controls are the production UI contract, not an unsafe guessed transmitter.")
 }
 
 @Composable
-private fun RemoteSettings() {
-    var mode2 by remember { mutableStateOf(true) }
-    var sensitivity by remember { mutableFloatStateOf(.55f) }
-    var deadZone by remember { mutableFloatStateOf(.05f) }
-    SettingsToggle("Stick Mode 2", "Throttle/yaw left; pitch/roll right", mode2) { mode2 = it }
-    SettingsSlider("Stick sensitivity", sensitivity, .1f..1f, "") { sensitivity = it }
-    SettingsSlider("Center dead zone", deadZone, 0f..0.2f, "") { deadZone = it }
+private fun RemoteSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsToggle("Stick Mode 2", "Throttle/yaw left; pitch/roll right", settings.controllerMode2) { update(settings.copy(controllerMode2 = it)) }
+    SettingsSlider("Stick sensitivity", settings.controllerSensitivity, .1f..1f, "") { update(settings.copy(controllerSensitivity = it)) }
+    SettingsSlider("Center dead zone", settings.controllerDeadZone, 0f..0.2f, "") { update(settings.copy(controllerDeadZone = it)) }
     SettingsAction("Controller calibration", "Center sticks and calibrate full travel")
     SettingsAction("Button assignments", "Map supported controller buttons")
 }
 
 @Composable
-private fun VideoLinkSettings() {
-    var auto by remember { mutableStateOf(true) }
-    var channel by remember { mutableFloatStateOf(5f) }
-    SettingsToggle("Automatic channel", "Prefer the least-congested validated channel", auto) { auto = it }
-    SettingsSlider("Manual channel", channel, 1f..13f, "") { channel = it }
+private fun VideoLinkSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsToggle("Automatic channel", "Prefer the least-congested validated channel", settings.videoChannelAutomatic) { update(settings.copy(videoChannelAutomatic = it)) }
+    SettingsSlider("Manual channel", settings.videoChannel.toFloat(), 1f..13f, "") { update(settings.copy(videoChannel = it.toInt())) }
     Text("CHANNEL ANALYZER", color = GsColors.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     Row(Modifier.fillMaxWidth().height(96.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
         listOf(.18f,.34f,.22f,.68f,.45f,.29f,.76f,.38f,.26f,.52f,.31f,.61f,.24f).forEachIndexed { index, strength ->
             androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).fillMaxHeight(strength).then(if ((index + 1) == channel.toInt()) Modifier else Modifier),
+                Modifier.weight(1f).fillMaxHeight(strength).then(if ((index + 1) == settings.videoChannel) Modifier else Modifier),
                 contentAlignment = Alignment.BottomCenter
             ) {
-                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().clickable { channel = (index + 1).toFloat() }.padding(horizontal = 1.dp)) {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().clickable { update(settings.copy(videoChannel = index + 1)) }.padding(horizontal = 1.dp)) {
                     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(top = 2.dp).let { it })
                 }
             }
@@ -133,38 +134,31 @@ private fun VideoLinkSettings() {
 }
 
 @Composable
-private fun BatterySettings() {
-    var low by remember { mutableFloatStateOf(30f) }
-    var critical by remember { mutableFloatStateOf(15f) }
-    var reserve by remember { mutableFloatStateOf(25f) }
-    var cellDelta by remember { mutableFloatStateOf(.08f) }
-    SettingsSlider("Low battery warning", low, 20f..50f, "%") { low = it }
-    SettingsSlider("Critical battery warning", critical, 8f..25f, "%") { critical = it }
-    SettingsSlider("Mission reserve", reserve, 15f..50f, "%") { reserve = it }
-    SettingsSlider("Cell-imbalance warning", cellDelta, .02f..0.15f, "V") { cellDelta = it }
+private fun BatterySettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsSlider("Low battery warning", settings.lowBatteryPercent.toFloat(), 20f..50f, "%") { update(settings.copy(lowBatteryPercent = it.toInt())) }
+    SettingsSlider("Critical battery warning", settings.criticalBatteryPercent.toFloat(), 8f..25f, "%") { update(settings.copy(criticalBatteryPercent = it.toInt())) }
+    SettingsSlider("Mission reserve", settings.missionReservePercent.toFloat(), 15f..50f, "%") { update(settings.copy(missionReservePercent = it.toInt())) }
+    SettingsSlider("Cell-imbalance warning", settings.cellDeltaWarningV, .02f..0.15f, "V") { update(settings.copy(cellDeltaWarningV = it)) }
     SettingsAction("Battery history", "Cycles, health, capacity and temperature events")
 }
 
 @Composable
-private fun GimbalSettings() {
-    var speed by remember { mutableFloatStateOf(.5f) }
-    var smoothing by remember { mutableFloatStateOf(.6f) }
-    SettingsSlider("Pitch speed", speed, .1f..1f, "") { speed = it }
-    SettingsSlider("Smoothing", smoothing, 0f..1f, "") { smoothing = it }
+private fun GimbalSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsSlider("Pitch speed", settings.gimbalPitchSpeed, .1f..1f, "") { update(settings.copy(gimbalPitchSpeed = it)) }
+    SettingsSlider("Smoothing", settings.gimbalSmoothing, 0f..1f, "") { update(settings.copy(gimbalSmoothing = it)) }
     SettingsAction("Recenter gimbal", "Return camera to neutral forward view")
     SettingsAction("Gimbal calibration", "Run calibration after aircraft is level and stationary")
 }
 
 @Composable
-private fun GeneralSettings() {
-    var metric by remember { mutableStateOf(true) }
-    var highVisibility by remember { mutableStateOf(false) }
-    var alerts by remember { mutableStateOf(true) }
-    var localLogs by remember { mutableStateOf(true) }
-    SettingsToggle("Metric units", "Meters, m/s and Celsius", metric) { metric = it }
-    SettingsToggle("High-visibility cockpit", "Increase HUD opacity and outdoor legibility", highVisibility) { highVisibility = it }
-    SettingsToggle("Audible safety alerts", "Battery, link loss, RTH and critical states", alerts) { alerts = it }
-    SettingsToggle("Local telemetry logs", "Store diagnostic data only on this device", localLogs) { localLogs = it }
+private fun GeneralSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+    SettingsToggle("Metric units", "Meters, m/s and Celsius", settings.metricUnits) { update(settings.copy(metricUnits = it)) }
+    SettingsToggle("High-visibility cockpit", "Increase HUD opacity and outdoor legibility", settings.highVisibility) { update(settings.copy(highVisibility = it)) }
+    SettingsToggle("Audible safety alerts", "Battery, link loss, RTH and critical states", settings.audibleAlerts) { update(settings.copy(audibleAlerts = it)) }
+    SettingsToggle("Haptic feedback", "Confirm critical actions and warnings", settings.haptics) { update(settings.copy(haptics = it)) }
+    SettingsToggle("Heading-up maps", "Rotate operational maps to aircraft heading", settings.mapHeadingUp) { update(settings.copy(mapHeadingUp = it)) }
+    SettingsToggle("Local telemetry logs", "Store diagnostic data only on this device", settings.localLogs) { update(settings.copy(localLogs = it)) }
+    SettingsToggle("Developer mode", "Expose protocol diagnostics and packet tools", settings.developerMode) { update(settings.copy(developerMode = it)) }
     SettingsAction("Firmware information", "Aircraft, controller, camera and battery versions")
     SettingsAction("Export diagnostics", "Create a support bundle without transmitting it automatically")
 }
