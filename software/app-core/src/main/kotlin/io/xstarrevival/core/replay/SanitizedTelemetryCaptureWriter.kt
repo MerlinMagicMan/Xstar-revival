@@ -106,7 +106,14 @@ class SanitizedTelemetryCaptureWriter(
             "image_link" to linkedMapOf(
                 "usb_enabled" to state.imageLink.usbEnabled,
                 "rf_frequency_hz" to state.imageLink.rfFrequencyHz,
-                "rf_signal_value" to state.imageLink.rfSignalValue
+                "rf_signal_value" to state.imageLink.rfSignalValue,
+                "automatic_channel" to state.imageLink.automaticChannel,
+                "channel" to state.imageLink.channel,
+                "channel_strengths" to state.imageLink.channelStrengths,
+                "interference_percent" to state.imageLink.interferencePercent,
+                "packet_loss_percent" to state.imageLink.packetLossPercent,
+                "latency_ms" to state.imageLink.latencyMs,
+                "bandwidth_mbps" to state.imageLink.bandwidthMbps
             ),
             "warnings" to state.warnings.map { warning ->
                 linkedMapOf(

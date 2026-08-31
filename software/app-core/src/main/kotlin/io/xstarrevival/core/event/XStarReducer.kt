@@ -100,7 +100,14 @@ object XStarReducer {
                 imageLink = state.imageLink.copy(
                     usbEnabled = event.usbEnabled ?: state.imageLink.usbEnabled,
                     rfFrequencyHz = event.rfFrequencyHz ?: state.imageLink.rfFrequencyHz,
-                    rfSignalValue = event.rfSignalValue ?: state.imageLink.rfSignalValue
+                    rfSignalValue = event.rfSignalValue ?: state.imageLink.rfSignalValue,
+                    automaticChannel = event.automaticChannel ?: state.imageLink.automaticChannel,
+                    channel = event.channel ?: state.imageLink.channel,
+                    channelStrengths = event.channelStrengths.ifEmpty { state.imageLink.channelStrengths },
+                    interferencePercent = event.interferencePercent ?: state.imageLink.interferencePercent,
+                    packetLossPercent = event.packetLossPercent ?: state.imageLink.packetLossPercent,
+                    latencyMs = event.latencyMs ?: state.imageLink.latencyMs,
+                    bandwidthMbps = event.bandwidthMbps ?: state.imageLink.bandwidthMbps
                 )
             )
             is XStarEvent.VideoSnapshot -> state.copy(

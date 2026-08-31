@@ -1,6 +1,8 @@
 package io.xstarrevival.app.gs
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -28,11 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import io.xstarrevival.app.TelemetrySource
+import io.xstarrevival.core.model.XStarState
 
 enum class GsSettingsFamily(val title: String, val subtitle: String) {
     FLIGHT("Flight Control", "Limits, RTH, Beginner Mode, ATTI and IOC"),
@@ -44,7 +50,11 @@ enum class GsSettingsFamily(val title: String, val subtitle: String) {
 }
 
 @Composable
-fun GsSettingsV2Screen() {
+fun GsSettingsV2Screen(
+    state: XStarState,
+    source: TelemetrySource,
+    onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit
+) {
     val context = LocalContext.current
     val store = remember(context) { GsSettingsStore(context.applicationContext) }
     var selected by remember { mutableStateOf(GsSettingsFamily.FLIGHT) }
@@ -83,7 +93,13 @@ fun GsSettingsV2Screen() {
                 when (selected) {
                     GsSettingsFamily.FLIGHT -> FlightControlSettings(settings, update)
                     GsSettingsFamily.REMOTE -> RemoteSettings(settings, update)
-                    GsSettingsFamily.VIDEO -> VideoLinkSettings(settings, update)
+                    GsSettingsFamily.VIDEO -> VideoLinkSettings(
+                        settings,
+                        update,
+                        state,
+                        source,
+                        onSimulatorVideoLinkChannel
+                    )
                     GsSettingsFamily.BATTERY -> BatterySettings(settings, update)
                     GsSettingsFamily.GIMBAL -> GimbalSettings(settings, update)
                     GsSettingsFamily.GENERAL -> GeneralSettings(settings, update)
@@ -114,22 +130,58 @@ private fun RemoteSettings(settings: GsUserSettings, update: (GsUserSettings) ->
 }
 
 @Composable
-private fun VideoLinkSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
-    SettingsToggle("Automatic channel", "Prefer the least-congested validated channel", settings.videoChannelAutomatic) { update(settings.copy(videoChannelAutomatic = it)) }
+private fun VideoLinkSettings(
+    settings: GsUserSettings,
+    update: (GsUserSettings) -> Unit,
+    state: XStarState,
+    source: TelemetrySource,
+    onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit
+) {
+    val canCommand = source == TelemetrySource.SIMULATOR
+    val airborne = state.aircraft.armed == true && (state.navigation.altitudeM ?: 0.0) > .2
+    SettingsToggle("Automatic channel", "Prefer the least-congested validated channel", settings.videoChannelAutomatic) {
+        if (!it && airborne) return@SettingsToggle
+        update(settings.copy(videoChannelAutomatic = it))
+        if (canCommand) onSimulatorVideoLinkChannel(it, if (it) null else settings.videoChannel)
+    }
     SettingsSlider("Manual channel", settings.videoChannel.toFloat(), 1f..13f, "") { update(settings.copy(videoChannel = it.toInt())) }
+    OutlinedButton(
+        onClick = { onSimulatorVideoLinkChannel(false, settings.videoChannel) },
+        enabled = canCommand && !settings.videoChannelAutomatic && !airborne,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("APPLY CHANNEL ${settings.videoChannel}") }
+    GsSettingLine("Active mode", state.imageLink.automaticChannel?.let { if (it) "AUTO" else "MANUAL" } ?: "Unavailable")
+    GsSettingLine("Active channel", state.imageLink.channel?.toString() ?: "Unavailable")
+    GsSettingLine("RF frequency", state.imageLink.rfFrequencyHz?.let { "%.3f MHz".format(it / 1_000_000.0) } ?: "Unavailable")
+    GsSettingLine("Signal", state.imageLink.rfSignalValue?.let { "$it%" } ?: "Unavailable")
+    GsSettingLine("Interference", state.imageLink.interferencePercent?.let { "$it%" } ?: "Unavailable")
+    GsSettingLine("Packet loss / latency", when {
+        state.imageLink.packetLossPercent != null && state.imageLink.latencyMs != null ->
+            "%.1f%% / %d ms".format(state.imageLink.packetLossPercent, state.imageLink.latencyMs)
+        else -> "Unavailable"
+    })
+    GsSettingLine("Bandwidth", state.imageLink.bandwidthMbps?.let { "%.1f Mbps".format(it) } ?: "Unavailable")
     Text("CHANNEL ANALYZER", color = GsColors.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    val strengths = state.imageLink.channelStrengths
     Row(Modifier.fillMaxWidth().height(96.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
-        listOf(.18f,.34f,.22f,.68f,.45f,.29f,.76f,.38f,.26f,.52f,.31f,.61f,.24f).forEachIndexed { index, strength ->
+        (1..13).forEach { channel ->
+            val strength = strengths.getOrNull(channel - 1)?.coerceIn(0, 100) ?: 0
+            val selected = channel == state.imageLink.channel
             androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).fillMaxHeight(strength).then(if ((index + 1) == settings.videoChannel) Modifier else Modifier),
+                Modifier.weight(1f).fillMaxHeight((strength / 100f).coerceAtLeast(.04f))
+                    .background(if (selected) GsColors.Orange else GsColors.Blue.copy(alpha = .72f), RoundedCornerShape(3.dp))
+                    .then(if (channel == settings.videoChannel) Modifier.border(1.dp, Color.White, RoundedCornerShape(3.dp)) else Modifier),
                 contentAlignment = Alignment.BottomCenter
             ) {
-                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().clickable { update(settings.copy(videoChannel = index + 1)) }.padding(horizontal = 1.dp)) {
-                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(top = 2.dp).let { it })
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().clickable { update(settings.copy(videoChannel = channel)) }.padding(horizontal = 1.dp)) {
+                    Text(channel.toString(), Modifier.align(Alignment.BottomCenter), color = Color.White, fontSize = 7.sp)
                 }
             }
         }
     }
+    if (strengths.isEmpty()) Text("Per-channel telemetry is unavailable for this source.", color = GsColors.Muted, fontSize = 10.sp)
+    if (!canCommand) Text("Channel writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
+    if (airborne) Text("Manual channel changes are locked while airborne.", color = GsColors.Amber, fontSize = 10.sp)
     SafetyNote("Channel switching while airborne will require an acknowledgement-capable transport and a review/confirm step.")
 }
 

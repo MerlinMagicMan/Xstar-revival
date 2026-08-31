@@ -2,6 +2,7 @@ package io.xstarrevival.core.replay
 
 import io.xstarrevival.core.model.AircraftState
 import io.xstarrevival.core.model.DiagnosticsState
+import io.xstarrevival.core.model.ImageLinkState
 import io.xstarrevival.core.model.NavigationState
 import io.xstarrevival.core.model.RemoteState
 import io.xstarrevival.core.model.XStarState
@@ -27,6 +28,15 @@ class SanitizedTelemetryCaptureWriterTest {
                     altitudeM = 22.4
                 ),
                 remote = RemoteState(signalPercent = 82, opaqueControlMenu = listOf(999_991, 999_992)),
+                imageLink = ImageLinkState(
+                    automaticChannel = false,
+                    channel = 6,
+                    channelStrengths = listOf(10, 20, 30),
+                    interferencePercent = 18,
+                    packetLossPercent = .8,
+                    latencyMs = 48,
+                    bandwidthMbps = 8.2
+                ),
                 diagnostics = DiagnosticsState(
                     source = "official-autel-sdk",
                     counters = mapOf("official_h264_frames" to 3),
@@ -40,6 +50,8 @@ class SanitizedTelemetryCaptureWriterTest {
         assertTrue(capture.contains("X-Star Premium"))
         assertTrue(capture.contains("\"satellites\":14"))
         assertTrue(capture.contains("official_h264_frames"))
+        assertTrue(capture.contains("\"channel\":6"))
+        assertTrue(capture.contains("\"latency_ms\":48"))
         assertFalse(capture.contains("41.8781"))
         assertFalse(capture.contains("-87.6298"))
         assertFalse(capture.contains("999991"))

@@ -77,7 +77,14 @@ sealed interface XStarEvent {
     data class ImageLinkSnapshot(
         val usbEnabled: Boolean? = null,
         val rfFrequencyHz: Double? = null,
-        val rfSignalValue: Int? = null
+        val rfSignalValue: Int? = null,
+        val automaticChannel: Boolean? = null,
+        val channel: Int? = null,
+        val channelStrengths: List<Int> = emptyList(),
+        val interferencePercent: Int? = null,
+        val packetLossPercent: Double? = null,
+        val latencyMs: Int? = null,
+        val bandwidthMbps: Double? = null
     ) : XStarEvent
 
     data class VideoSnapshot(

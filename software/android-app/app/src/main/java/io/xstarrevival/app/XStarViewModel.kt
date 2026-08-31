@@ -24,6 +24,7 @@ import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
+import io.xstarrevival.core.command.SetVideoLinkChannelCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartWaypointMissionCommand
 import io.xstarrevival.core.command.StartCourseLockCommand
@@ -368,6 +369,12 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     fun configureSimulatorGimbal(sensitivity: Double, smoothing: Double, pitchSpeed: Double) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) {
             simulatorCommands.dispatch(ConfigureGimbalCommand(sensitivity, smoothing, pitchSpeed))
+        }
+    }
+
+    fun setSimulatorVideoLinkChannel(automatic: Boolean, channel: Int?) {
+        if (mutableSource.value == TelemetrySource.SIMULATOR) {
+            simulatorCommands.dispatch(SetVideoLinkChannelCommand(automatic, channel))
         }
     }
 

@@ -134,6 +134,9 @@ class CommandSafetyValidator {
                 if (!command.automatic && (command.channel == null || command.channel !in 1..13)) {
                     issues += blocking("Manual video-link channel must be between 1 and 13")
                 }
+                if (!command.automatic && state.aircraft.armed == true && (state.navigation.altitudeM ?: 0.0) > 0.2) {
+                    issues += blocking("Manual video-link channel switching is blocked while airborne")
+                }
             }
             is SetBatteryWarningsCommand -> {
                 if (command.criticalPercent !in 5..25) issues += blocking("Critical battery warning must be between 5% and 25%")

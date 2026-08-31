@@ -21,6 +21,7 @@ import io.xstarrevival.core.command.ReturnToHomeCommand
 import io.xstarrevival.core.command.ResumeMissionCommand
 import io.xstarrevival.core.command.SetExposureCommand
 import io.xstarrevival.core.command.SetGimbalPitchCommand
+import io.xstarrevival.core.command.SetVideoLinkChannelCommand
 import io.xstarrevival.core.command.StartRecordingCommand
 import io.xstarrevival.core.command.StartFollowCommand
 import io.xstarrevival.core.command.StartCourseLockCommand
@@ -62,6 +63,7 @@ class SimulatorCommandAdapter(
         CommandKind.RECENTER_GIMBAL,
         CommandKind.CALIBRATE_GIMBAL,
         CommandKind.CONFIGURE_GIMBAL,
+        CommandKind.SET_VIDEO_LINK_CHANNEL,
         CommandKind.START_WAYPOINT_MISSION,
         CommandKind.PAUSE_MISSION,
         CommandKind.RESUME_MISSION,
@@ -98,6 +100,7 @@ class SimulatorCommandAdapter(
                 command.smoothing,
                 command.pitchSpeed
             )
+            is SetVideoLinkChannelCommand -> platform.setVideoLinkChannel(command.automatic, command.channel)
             is StartWaypointMissionCommand -> if (!platform.startMission(command.mission)) {
                 return CommandAcknowledgement.Rejected("Simulator could not start the mission")
             }
@@ -188,6 +191,10 @@ class SimulatorCommandAdapter(
                 it.gimbal.sensitivity == command.sensitivity &&
                     it.gimbal.smoothing == command.smoothing &&
                     it.gimbal.pitchSpeed == command.pitchSpeed
+            }
+            is SetVideoLinkChannelCommand -> awaitState(request) {
+                it.imageLink.automaticChannel == command.automatic &&
+                    (command.automatic || it.imageLink.channel == command.channel)
             }
             TakePhotoCommand -> awaitState(request) { it.camera.photosTaken > 0 }
             is StartWaypointMissionCommand -> awaitMissionTerminal()
