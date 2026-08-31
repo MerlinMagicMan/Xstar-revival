@@ -55,6 +55,7 @@ import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.command.isTerminal
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.SmartFlightExecutionState
 import io.xstarrevival.core.groundstation.SmartFlightMode
 import io.xstarrevival.core.groundstation.SmartFlightPhase
@@ -492,18 +493,26 @@ private fun GsRailButton(glyph: String, label: String, onClick: () -> Unit, acce
 
 @Composable
 private fun GsMiniMap(state: XStarState, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val aircraft = state.navigation.latitudeDeg?.let { latitude ->
+        state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+    }
+    val home = state.navigation.homeLatitudeDeg?.let { latitude ->
+        state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+    }
     Box(
         modifier.size(190.dp, 120.dp).background(Color(0xDD10151B), RoundedCornerShape(14.dp))
             .border(1.dp, Color.White.copy(alpha = .16f), RoundedCornerShape(14.dp)).clickable(onClick = onClick)
     ) {
-        Canvas(Modifier.fillMaxSize().padding(8.dp)) {
-            val grid = Color.White.copy(alpha = .08f)
-            repeat(5) { i -> drawLine(grid, Offset(size.width * i / 4f, 0f), Offset(size.width * i / 4f, size.height), 1f) }
-            repeat(4) { i -> drawLine(grid, Offset(0f, size.height * i / 3f), Offset(size.width, size.height * i / 3f), 1f) }
-            drawCircle(GsColors.Orange, 7f, Offset(size.width * .62f, size.height * .42f))
-            drawCircle(GsColors.Green, 6f, Offset(size.width * .28f, size.height * .70f), style = Stroke(2f))
-        }
-        Text("MAP", Modifier.align(Alignment.TopStart).padding(8.dp), color = GsColors.Muted, fontSize = 9.sp)
+        GsOperationalMap(
+            modifier = Modifier.fillMaxSize(),
+            aircraft = aircraft,
+            aircraftHeadingDeg = state.attitude.yawDeg,
+            home = home,
+            fitKey = aircraft,
+            followAircraft = true,
+            showControls = false,
+            label = "LIVE MAP"
+        )
         Text(
             state.navigation.latitudeDeg?.let { "%.5f".format(it) } ?: "OFFLINE",
             Modifier.align(Alignment.BottomEnd).padding(8.dp), color = GsColors.Muted, fontSize = 8.sp, fontFamily = FontFamily.Monospace

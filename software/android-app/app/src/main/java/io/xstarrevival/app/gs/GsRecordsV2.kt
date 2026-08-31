@@ -2,7 +2,6 @@ package io.xstarrevival.app.gs
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,13 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.xstarrevival.core.groundstation.GeoPoint
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.model.XStarState
 import java.text.DateFormat
@@ -126,7 +124,7 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
     val positionedSamples = samples.mapIndexedNotNull { index, sample ->
         val latitude = sample.latitudeDeg ?: return@mapIndexedNotNull null
         val longitude = sample.longitudeDeg ?: return@mapIndexedNotNull null
-        IndexedValue(index, GeoSample(latitude, longitude))
+        IndexedValue(index, GeoPoint(latitude, longitude))
     }
 
     LaunchedEffect(playing, record.startedAtEpochMs) {
@@ -142,15 +140,15 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.weight(.62f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxSize()) {
-                Canvas(Modifier.fillMaxSize().padding(20.dp)) {
-                    val grid = Color.White.copy(alpha = .055f)
-                    repeat(11) { i -> drawLine(grid, Offset(size.width*i/10f,0f), Offset(size.width*i/10f,size.height),1f) }
-                    repeat(7) { i -> drawLine(grid, Offset(0f,size.height*i/6f), Offset(size.width,size.height*i/6f),1f) }
-                    val points = projectFlight(positionedSamples.map { it.value }, size.width, size.height)
-                    points.zipWithNext().forEach { (a,b) -> drawLine(GsColors.Orange,a,b,4f) }
-                    val currentPositionIndex = positionedSamples.indexOfLast { it.index <= replayIndex }
-                    if (currentPositionIndex >= 0) drawCircle(GsColors.Red, 12f, points[currentPositionIndex])
-                }
+                val currentPositionIndex = positionedSamples.indexOfLast { it.index <= replayIndex }
+                GsOperationalMap(
+                    modifier = Modifier.fillMaxSize(),
+                    aircraft = positionedSamples.getOrNull(currentPositionIndex)?.value,
+                    aircraftHeadingDeg = currentSample?.headingDeg,
+                    flightPath = positionedSamples.map { it.value },
+                    fitKey = record.startedAtEpochMs,
+                    label = "RECORDED TELEMETRY · ${samples.size} SAMPLES"
+                )
                 Text("RECORDED TELEMETRY PATH · ${samples.size} SAMPLES", Modifier.align(Alignment.TopStart).padding(16.dp), color = GsColors.Muted, fontSize = 10.sp)
                 if (positionedSamples.isEmpty()) {
                     Text(
@@ -207,15 +205,21 @@ private fun RecoveryDetail(state: XStarState, recoveryPoints: List<RecoveryPoint
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.weight(.62f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxSize()) {
-                Canvas(Modifier.fillMaxSize().padding(20.dp)) {
-                    val grid = Color.White.copy(alpha=.055f)
-                    repeat(10) { i -> drawLine(grid,Offset(size.width*i/9f,0f),Offset(size.width*i/9f,size.height),1f) }
-                    repeat(7) { i -> drawLine(grid,Offset(0f,size.height*i/6f),Offset(size.width,size.height*i/6f),1f) }
-                    val pts = projectRecovery(recoveryPoints,size.width,size.height)
-                    pts.zipWithNext().forEach { (a,b) -> drawLine(GsColors.Orange.copy(alpha=.75f),a,b,4f) }
-                    pts.forEach { drawCircle(GsColors.Orange,6f,it) }
-                    pts.lastOrNull()?.let { drawCircle(GsColors.Red,14f,it) }
+                val currentAircraft = last?.position ?: state.navigation.latitudeDeg?.let { latitude ->
+                    state.navigation.longitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
                 }
+                val home = state.navigation.homeLatitudeDeg?.let { latitude ->
+                    state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
+                }
+                GsOperationalMap(
+                    modifier = Modifier.fillMaxSize(),
+                    aircraft = currentAircraft,
+                    aircraftHeadingDeg = last?.headingDeg ?: state.attitude.yawDeg,
+                    home = home,
+                    flightPath = recoveryPoints.map { it.position },
+                    fitKey = recoveryPoints.size,
+                    label = "LAST KNOWN PATH · ${recoveryPoints.size} SAMPLES"
+                )
                 Text("LAST KNOWN PATH · ${recoveryPoints.size} SAMPLES", Modifier.align(Alignment.TopStart).padding(16.dp), color=GsColors.Muted,fontSize=10.sp)
                 if (recoveryPoints.isEmpty()) Text("No recorded aircraft position",Modifier.align(Alignment.Center),color=GsColors.Muted)
             }
@@ -242,34 +246,6 @@ private fun RecoveryDetail(state: XStarState, recoveryPoints: List<RecoveryPoint
             ) { Text("NAVIGATE TO LAST POSITION") }
             OutlinedButton(onClick = { }, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("EXPORT RECOVERY PATH — NOT YET AVAILABLE") }
         }
-    }
-}
-
-private fun projectRecovery(points: List<RecoveryPoint>, width: Float, height: Float): List<Offset> {
-    if (points.isEmpty()) return emptyList()
-    val minLat=points.minOf{it.position.latitudeDeg}; val maxLat=points.maxOf{it.position.latitudeDeg}
-    val minLon=points.minOf{it.position.longitudeDeg}; val maxLon=points.maxOf{it.position.longitudeDeg}
-    val latSpan=(maxLat-minLat).takeIf{it>1e-7}?:1e-7; val lonSpan=(maxLon-minLon).takeIf{it>1e-7}?:1e-7
-    return points.map { p ->
-        val x=((p.position.longitudeDeg-minLon)/lonSpan).toFloat(); val y=(1.0-(p.position.latitudeDeg-minLat)/latSpan).toFloat()
-        Offset(45f+x*(width-90f),45f+y*(height-90f))
-    }
-}
-
-private data class GeoSample(val latitudeDeg: Double, val longitudeDeg: Double)
-
-private fun projectFlight(samples: List<GeoSample>, width: Float, height: Float): List<Offset> {
-    if (samples.isEmpty()) return emptyList()
-    val minLat = samples.minOf { it.latitudeDeg }
-    val maxLat = samples.maxOf { it.latitudeDeg }
-    val minLon = samples.minOf { it.longitudeDeg }
-    val maxLon = samples.maxOf { it.longitudeDeg }
-    val latSpan = (maxLat - minLat).takeIf { it > 1e-7 } ?: 1e-7
-    val lonSpan = (maxLon - minLon).takeIf { it > 1e-7 } ?: 1e-7
-    return samples.map { sample ->
-        val x = ((sample.longitudeDeg - minLon) / lonSpan).toFloat()
-        val y = (1.0 - (sample.latitudeDeg - minLat) / latSpan).toFloat()
-        Offset(45f + x * (width - 90f), 45f + y * (height - 90f))
     }
 }
 
