@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.xstarrevival.app.gs.GsAcademyScreen
 import io.xstarrevival.app.gs.GsAircraftScreen
 import io.xstarrevival.app.gs.GsCockpitScreen
 import io.xstarrevival.app.gs.GsColors
@@ -117,6 +118,7 @@ private fun GroundStationV2App(
                 GsPage.MEDIA -> GsMediaScreen(state)
                 GsPage.AIRCRAFT -> GsAircraftScreen(state)
                 GsPage.SETTINGS -> GsSettingsV2Screen()
+                GsPage.HELP -> GsAcademyScreen()
             }
         }
     }
