@@ -11,7 +11,8 @@ enum class GsPage(val label: String, val glyph: String) {
     RECORDS("Flights", "≋"),
     MEDIA("Media", "▣"),
     AIRCRAFT("Aircraft", "◇"),
-    SETTINGS("Settings", "⚙")
+    SETTINGS("Settings", "⚙"),
+    HELP("Academy", "?")
 }
 
 enum class GsReadiness { OFFLINE, CHECKING, READY, WARNING, CRITICAL }
