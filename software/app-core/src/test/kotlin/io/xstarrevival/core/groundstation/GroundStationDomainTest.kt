@@ -2,7 +2,11 @@ package io.xstarrevival.core.groundstation
 
 import io.xstarrevival.core.model.BatteryState
 import io.xstarrevival.core.model.CellState
+import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.NavigationState
+import io.xstarrevival.core.model.RemoteState
+import io.xstarrevival.core.model.Severity
+import io.xstarrevival.core.model.WarningState
 import io.xstarrevival.core.model.XStarState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,10 +37,52 @@ class GroundStationDomainTest {
             name = "Survey",
             waypoints = listOf(MissionWaypoint("w1", GeoPoint(35.5, -97.6), 40.0, 5.0))
         )
-        val aircraft = XStarState(navigation = NavigationState(satellites = 4))
+        val aircraft = XStarState(
+            connection = ConnectionState.Connected("test", "X-Star Premium"),
+            navigation = NavigationState(satellites = 4),
+            battery = BatteryState(percent = 80),
+            remote = RemoteState(connected = true)
+        )
         val validation = MissionValidator.validate(plan, aircraft)
         assertFalse(validation.canExecute)
         assertTrue(validation.issues.any { it.message.contains("GPS") })
+    }
+
+    @Test
+    fun unknownLiveSafetyInputsBlockMissionExecution() {
+        val plan = MissionPlan(
+            id = "m1",
+            name = "Survey",
+            waypoints = listOf(MissionWaypoint("w1", GeoPoint(35.5, -97.6), 40.0, 5.0))
+        )
+
+        val validation = MissionValidator.validate(plan, XStarState())
+
+        assertFalse(validation.canExecute)
+        assertTrue(validation.issues.any { it.message.contains("battery state") })
+        assertTrue(validation.issues.any { it.message.contains("GPS satellite state") })
+        assertTrue(validation.issues.any { it.message.contains("controller state") })
+    }
+
+    @Test
+    fun criticalAircraftWarningBlocksMissionExecution() {
+        val plan = MissionPlan(
+            id = "m1",
+            name = "Survey",
+            waypoints = listOf(MissionWaypoint("w1", GeoPoint(35.5, -97.6), 40.0, 5.0))
+        )
+        val aircraft = XStarState(
+            connection = ConnectionState.Connected("test", "X-Star Premium"),
+            navigation = NavigationState(satellites = 12),
+            battery = BatteryState(percent = 80),
+            remote = RemoteState(connected = true),
+            warnings = listOf(WarningState("battery", Severity.CRITICAL, "Battery fault"))
+        )
+
+        val validation = MissionValidator.validate(plan, aircraft)
+
+        assertFalse(validation.canExecute)
+        assertTrue(validation.issues.any { it.message.contains("critical warning") })
     }
 
     @Test

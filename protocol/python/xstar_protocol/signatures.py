@@ -37,6 +37,12 @@ def scan_signatures(data: bytes) -> List[SignatureHit]:
             idx = data.find(needle, start)
             if idx < 0:
                 break
+            # A four-byte Annex-B start code also contains the three-byte
+            # form beginning at its second zero. Report the NAL once, at the
+            # beginning of the complete start code.
+            if kind == "h264" and needle.startswith(b"\x00\x00\x01") and idx > 0 and data[idx - 1] == 0:
+                start = idx + 1
+                continue
             hits.append(SignatureHit(kind=kind, offset=idx, detail=detail))
             start = idx + 1
     hits.sort(key=lambda h: h.offset)
