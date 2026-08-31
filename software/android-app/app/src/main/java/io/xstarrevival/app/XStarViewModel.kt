@@ -8,6 +8,14 @@ import io.xstarrevival.core.XStarPlatform
 import io.xstarrevival.core.adapter.AutelSdkBridge
 import io.xstarrevival.core.adapter.AutelSdkPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
+import io.xstarrevival.core.command.ArmCommand
+import io.xstarrevival.core.command.CommandDispatcher
+import io.xstarrevival.core.command.CommandStatus
+import io.xstarrevival.core.command.DisarmCommand
+import io.xstarrevival.core.command.LandCommand
+import io.xstarrevival.core.command.StartRecordingCommand
+import io.xstarrevival.core.command.StopRecordingCommand
+import io.xstarrevival.core.command.TakeoffCommand
 import io.xstarrevival.core.mock.MockXStarPlatform
 import io.xstarrevival.core.model.ConnectionState
 import io.xstarrevival.core.model.XStarState
@@ -16,6 +24,7 @@ import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
 import io.xstarrevival.core.sim.SimulatorControlInput
+import io.xstarrevival.core.sim.SimulatorCommandAdapter
 import io.xstarrevival.core.sim.SimulatorXStarPlatform
 import io.xstarrevival.core.video.H264VideoFrame
 import io.xstarrevival.core.video.H264CaptureStopReason
@@ -53,6 +62,11 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     private val controllerUsbInputProbe = ControllerUsbInputProbe(application, viewModelScope)
     private val mockPlatform = MockXStarPlatform(viewModelScope)
     private val simulatorPlatform = SimulatorXStarPlatform(viewModelScope)
+    private val simulatorCommands = CommandDispatcher(
+        scope = viewModelScope,
+        stateProvider = { simulatorPlatform.state.value },
+        transport = SimulatorCommandAdapter(simulatorPlatform)
+    )
     private val replayTransport = CaptureReplayTransport(
         scope = viewModelScope,
         chunks = StandardMavlinkDemoCapture.chunks,
@@ -101,6 +115,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     val platformName: StateFlow<String> = mutablePlatformName.asStateFlow()
 
     val replayState: StateFlow<CaptureReplayState> = replayTransport.playback
+    val commandStatus: StateFlow<CommandStatus?> = simulatorCommands.latest
 
     private val mutableHeartbeat = MutableStateFlow(HeartbeatUiState())
     val heartbeat: StateFlow<HeartbeatUiState> = mutableHeartbeat.asStateFlow()
@@ -122,6 +137,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         if (value == mutableSource.value) return
         if (value == TelemetrySource.OFFICIAL_AUTEL && officialPlatform == null) return
         viewModelScope.launch {
+            simulatorCommands.cancelAll()
             if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
                 benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
                 controllerUsbInputProbe.stop(ControllerProbeStopReason.USER)
@@ -148,6 +164,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect() {
         viewModelScope.launch {
+            simulatorCommands.cancelAll()
             if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL) {
                 benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
                 controllerUsbInputProbe.stop(ControllerProbeStopReason.USER)
@@ -184,19 +201,25 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSimulatorArm() {
-        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.toggleArm()
+        if (mutableSource.value != TelemetrySource.SIMULATOR) return
+        simulatorCommands.dispatch(
+            if (simulatorPlatform.state.value.aircraft.armed == true) DisarmCommand else ArmCommand
+        )
     }
 
     fun simulatorTakeOff() {
-        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.takeOff()
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(TakeoffCommand)
     }
 
     fun simulatorLand() {
-        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.land()
+        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(LandCommand)
     }
 
     fun toggleSimulatorRecording() {
-        if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.toggleRecording()
+        if (mutableSource.value != TelemetrySource.SIMULATOR) return
+        simulatorCommands.dispatch(
+            if (simulatorPlatform.state.value.camera.recording == true) StopRecordingCommand else StartRecordingCommand
+        )
     }
 
     fun startBenchCapture() {
@@ -273,6 +296,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        simulatorCommands.cancelAll()
         benchCaptureManager.stop(H264CaptureStopReason.SOURCE_ENDED)
         controllerUsbInputProbe.close()
         replayTransport.pause()

@@ -60,6 +60,16 @@ class SimulatorXStarPlatform(
         publish()
     }
 
+    fun arm() {
+        snapshot = SimulatorFlightModel.arm(snapshot)
+        publish()
+    }
+
+    fun disarm() {
+        snapshot = SimulatorFlightModel.disarm(snapshot)
+        publish()
+    }
+
     fun takeOff() {
         snapshot = SimulatorFlightModel.takeOff(snapshot)
         publish()
@@ -72,6 +82,16 @@ class SimulatorXStarPlatform(
 
     fun toggleRecording() {
         snapshot = SimulatorFlightModel.toggleRecording(snapshot)
+        publish()
+    }
+
+    fun setRecording(recording: Boolean) {
+        snapshot = SimulatorFlightModel.setRecording(snapshot, recording)
+        publish()
+    }
+
+    fun setGimbalPitch(pitchDeg: Double) {
+        snapshot = SimulatorFlightModel.setGimbalPitch(snapshot, pitchDeg)
         publish()
     }
 

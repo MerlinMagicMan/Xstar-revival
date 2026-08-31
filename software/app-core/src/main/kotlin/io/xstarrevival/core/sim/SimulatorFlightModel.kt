@@ -65,9 +65,19 @@ object SimulatorFlightModel {
     private const val MAX_YAW_RATE_DPS = 90.0
     private const val GIMBAL_RATE_DPS = 35.0
 
-    fun toggleArm(snapshot: SimulatorSnapshot): SimulatorSnapshot = when (snapshot.phase) {
+    fun arm(snapshot: SimulatorSnapshot): SimulatorSnapshot = when (snapshot.phase) {
         SimulatorFlightPhase.GROUNDED -> snapshot.copy(phase = SimulatorFlightPhase.ARMED)
+        else -> snapshot
+    }
+
+    fun disarm(snapshot: SimulatorSnapshot): SimulatorSnapshot = when (snapshot.phase) {
         SimulatorFlightPhase.ARMED -> snapshot.copy(phase = SimulatorFlightPhase.GROUNDED)
+        else -> snapshot
+    }
+
+    fun toggleArm(snapshot: SimulatorSnapshot): SimulatorSnapshot = when (snapshot.phase) {
+        SimulatorFlightPhase.GROUNDED -> arm(snapshot)
+        SimulatorFlightPhase.ARMED -> disarm(snapshot)
         else -> snapshot
     }
 
@@ -85,6 +95,12 @@ object SimulatorFlightModel {
 
     fun toggleRecording(snapshot: SimulatorSnapshot): SimulatorSnapshot =
         snapshot.copy(recording = !snapshot.recording)
+
+    fun setRecording(snapshot: SimulatorSnapshot, recording: Boolean): SimulatorSnapshot =
+        snapshot.copy(recording = recording)
+
+    fun setGimbalPitch(snapshot: SimulatorSnapshot, pitchDeg: Double): SimulatorSnapshot =
+        snapshot.copy(gimbalPitchDeg = pitchDeg.coerceIn(-90.0, 30.0))
 
     fun step(
         snapshot: SimulatorSnapshot,
@@ -148,7 +164,7 @@ object SimulatorFlightModel {
         if (!airborne) altitude = 0.0
 
         val gimbalPitch = (snapshot.gimbalPitchDeg + input.gimbal * GIMBAL_RATE_DPS * dt)
-            .coerceIn(-90.0, 15.0)
+            .coerceIn(-90.0, 30.0)
         val load = if (airborne) 0.010 + horizontalSpeed * 0.0015 + abs(verticalSpeed) * 0.002 else 0.001
 
         return snapshot.copy(

@@ -13,7 +13,8 @@ This is the product-facing Android application. Its public build includes mock a
 - remote-controller status
 - camera/video status and frame counter
 - diagnostic counters
-- software-only flight simulator with dual virtual sticks, takeoff/landing, gimbal, and camera state
+- software-only flight simulator with dual virtual sticks, validated takeoff/landing, gimbal, and camera commands
+- visible command acknowledgement, reconciliation, rejection, failure, cancellation, and timeout states
 - local flight summaries with bounded, normalized telemetry-path replay for the 50 newest flights
 - last-known-aircraft path history with handoff to an installed maps application
 
@@ -26,6 +27,11 @@ The separate Flight Simulator source runs a deterministic local flight model. It
 change only virtual state: the simulator module has no USB, radio, official-SDK, or open-transport
 dependency. Takeoff, landing, yaw, pitch, roll, altitude, gimbal tilt, battery load, position, and
 virtual recording state can therefore be exercised without an aircraft.
+
+Discrete simulator actions are routed through app core's normalized command dispatcher. The
+cockpit disables overlapping actions while a command is active and shows the current command phase
+and validation/transport detail. Completion means the expected simulator state was observed, not
+merely that a button callback returned.
 
 ## Build
 
@@ -87,25 +93,18 @@ The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f09
 
 ## Adapter plan
 
-The ViewModel owns an `XStarPlatform` only. Moving to live hardware should be a dependency-selection change rather than a UI rewrite:
+The ViewModel consumes normalized `XStarPlatform` state and sends discrete actions only through a
+`CommandDispatcher`. Moving to live hardware requires an audited live `CommandTransport`; it is not
+enabled by selecting a different telemetry source.
+
+The current command binding is deliberately simulator-only:
 
 ```kotlin
-private val platform: XStarPlatform = MockXStarPlatform(viewModelScope)
+CommandDispatcher(
+    stateProvider = { simulatorPlatform.state.value },
+    transport = SimulatorCommandAdapter(simulatorPlatform)
+)
 ```
-
-becomes either:
-
-```text
-OfficialAutelSdkAdapter
-```
-
-or:
-
-```text
-OpenXStarPlatform
-```
-
-when those adapters are ready.
 
 The official bridge's allowed observations and compile-time forbidden control calls are defined in the [X-Star SDK Capability Matrix](../../docs/XSTAR-SDK-CAPABILITY-MATRIX.md). Local Gradle builds and public CI both run an explicit forbidden-call audit.
 

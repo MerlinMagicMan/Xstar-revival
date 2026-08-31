@@ -22,11 +22,11 @@ OpenXStarPlatform
 ## Rules
 
 - Domain state is immutable.
-- Read-only capabilities are modeled separately from future control capabilities.
+- Read-only platform capabilities are modeled separately from command transports.
 - No UI code parses MAVLink or USB packets.
 - No protocol implementation depends on Android views.
 - Unknown values stay unknown; do not invent defaults.
-- Safety-critical write/control APIs are intentionally absent from this phase.
+- Live safety-critical write/control APIs remain intentionally absent.
 
 ## Initial State Surface
 
@@ -43,6 +43,25 @@ OpenXStarPlatform
 - diagnostics
 
 The mock implementation produces deterministic changing telemetry so UI and state handling can be developed without hardware.
+
+## Normalized command system
+
+App core now defines transport-independent flight, navigation, smart-flight, camera, gimbal, and
+configuration commands. `CommandSafetyValidator` checks connection, preflight readiness, home
+position, command conflicts, camera availability, and parameter ranges before a command can leave
+the dispatcher. `CommandDispatcher` publishes the complete lifecycle:
+
+```text
+IDLE -> VALIDATING -> READY -> SENDING -> ACKNOWLEDGED -> ACTIVE -> COMPLETED
+```
+
+Rejected, failed, timed-out, cancelled, and unsupported commands are terminal states with an
+operator-readable reason. A command is only complete after its transport reconciles the expected
+normalized state.
+
+`SimulatorCommandAdapter` is the first command transport. It can mutate only
+`SimulatorXStarPlatform`; neither the official Autel bridge nor the open receive-only transport
+implements `CommandTransport`.
 
 ## Official SDK read-only bridge
 

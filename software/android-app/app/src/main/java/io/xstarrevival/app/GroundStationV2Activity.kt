@@ -36,6 +36,7 @@ import io.xstarrevival.app.gs.GsSettingsV2Screen
 import io.xstarrevival.app.gs.GsTheme
 import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.core.groundstation.RecoveryPoint
+import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
@@ -49,8 +50,9 @@ class GroundStationV2Activity : ComponentActivity() {
                 val state by vm.state.collectAsStateWithLifecycle()
                 val source by vm.source.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
+                val commandStatus by vm.commandStatus.collectAsStateWithLifecycle()
                 GroundStationV2App(
-                    state, source, heartbeat, vm.availableSources, vm.liveVideoFrames,
+                    state, source, heartbeat, commandStatus, vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording
                 )
@@ -64,6 +66,7 @@ private fun GroundStationV2App(
     state: XStarState,
     source: TelemetrySource,
     heartbeat: HeartbeatUiState,
+    commandStatus: CommandStatus?,
     availableSources: List<TelemetrySource>,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSource: (TelemetrySource) -> Unit,
@@ -109,7 +112,7 @@ private fun GroundStationV2App(
                     { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS }
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
-                    state, source, heartbeat, liveVideoFrames,
+                    state, source, heartbeat, commandStatus, liveVideoFrames,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
