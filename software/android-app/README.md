@@ -50,6 +50,13 @@ include the return leg and landing time when Return Home is selected. During the
 the mission panel switches from waypoint progress to Home distance/ETA, the cockpit shows the
 dedicated RTH state, Pause is disabled, and Cancel RTH safely aborts the mission.
 
+Mission configuration and review expose the persisted lost-link failsafe: Continue, Return Home,
+or Hover. The simulator applies that selection for RC or complete aircraft link-loss scenarios;
+Hover remains paused after recovery until Resume is confirmed. A Land finish now stays in the
+active landing state and completes only after touchdown rather than when descent begins. After a
+previously established aircraft connection drops, the cockpit replaces the generic stale badge
+with a running LOST-link timer while retaining the last known telemetry.
+
 Simulator RTH now uses an explicit confirmation and reports climb, return, landing, and completion
 progress in the cockpit. Orbit and Follow editors provide simulator-only review/start flows and
 active-state Stop controls. Orbit reviews radius, altitude, speed, direction, laps, and POI; Follow
