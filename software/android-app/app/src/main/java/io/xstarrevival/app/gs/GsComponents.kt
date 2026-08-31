@@ -3,6 +3,8 @@ package io.xstarrevival.app.gs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,7 @@ import io.xstarrevival.core.model.ConnectionState
 @Composable
 fun GsNavigationRail(page: GsPage, onPage: (GsPage) -> Unit) {
     Column(
-        Modifier.width(92.dp).fillMaxHeight().background(Color(0xFF0D1014)).padding(vertical = 16.dp),
+        Modifier.width(92.dp).fillMaxHeight().background(Color(0xFF0D1014)).verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
