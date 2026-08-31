@@ -25,7 +25,7 @@ import io.xstarrevival.app.gs.GsCockpitScreen
 import io.xstarrevival.app.gs.GsColors
 import io.xstarrevival.app.gs.GsGarageScreen
 import io.xstarrevival.app.gs.GsMediaScreen
-import io.xstarrevival.app.gs.GsMissionScreen
+import io.xstarrevival.app.gs.GsMissionV2Screen
 import io.xstarrevival.app.gs.GsNavigationRail
 import io.xstarrevival.app.gs.GsPage
 import io.xstarrevival.app.gs.GsPersistence
@@ -112,7 +112,7 @@ private fun GroundStationV2App(
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
-                GsPage.MISSIONS -> GsMissionScreen(state)
+                GsPage.MISSIONS -> GsMissionV2Screen(state)
                 GsPage.RECORDS -> GsRecordsScreen(state, recoveryPoints, flightSummaries)
                 GsPage.MEDIA -> GsMediaScreen(state)
                 GsPage.AIRCRAFT -> GsAircraftScreen(state)
