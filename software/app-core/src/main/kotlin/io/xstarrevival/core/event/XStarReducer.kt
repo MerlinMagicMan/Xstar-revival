@@ -89,7 +89,11 @@ object XStarReducer {
             is XStarEvent.GimbalSnapshot -> state.copy(
                 gimbal = state.gimbal.copy(
                     pitchDeg = event.pitchDeg ?: state.gimbal.pitchDeg,
-                    status = event.status ?: state.gimbal.status
+                    status = event.status ?: state.gimbal.status,
+                    sensitivity = event.sensitivity ?: state.gimbal.sensitivity,
+                    smoothing = event.smoothing ?: state.gimbal.smoothing,
+                    pitchSpeed = event.pitchSpeed ?: state.gimbal.pitchSpeed,
+                    calibrated = event.calibrated ?: state.gimbal.calibrated
                 )
             )
             is XStarEvent.ImageLinkSnapshot -> state.copy(

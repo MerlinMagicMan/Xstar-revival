@@ -92,6 +92,10 @@ fun GsCockpitScreen(
     onSimulatorCameraMode: (String) -> Unit,
     onSimulatorExposure: (Int?, Double?, Double?) -> Unit,
     onSimulatorCameraConfiguration: (Map<String, String>) -> Unit,
+    onSimulatorGimbalPitch: (Double) -> Unit,
+    onSimulatorGimbalRecenter: () -> Unit,
+    onSimulatorGimbalCalibration: () -> Unit,
+    onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onStartRth: () -> Unit,
@@ -126,6 +130,7 @@ fun GsCockpitScreen(
             onPhoto = onSimulatorPhoto,
             onExposure = { dialog = CockpitDialog.Exposure },
             onCameraSettings = { dialog = CockpitDialog.Camera },
+            onGimbal = { dialog = CockpitDialog.Gimbal },
             commandEnabled = !commandBusy,
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)
         )
@@ -241,11 +246,20 @@ fun GsCockpitScreen(
             },
             onDismiss = { dialog = null }
         )
+        CockpitDialog.Gimbal -> GsGimbalDialog(
+            state = state,
+            enabled = source == TelemetrySource.SIMULATOR && !commandBusy,
+            onPitch = onSimulatorGimbalPitch,
+            onRecenter = onSimulatorGimbalRecenter,
+            onCalibrate = onSimulatorGimbalCalibration,
+            onConfigure = onSimulatorGimbalConfiguration,
+            onDismiss = { dialog = null }
+        )
         null -> Unit
     }
 }
 
-private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario, Controls, Exposure, Camera }
+private enum class CockpitDialog { Health, Rth, SmartFlight, Home, Scenario, Controls, Exposure, Camera, Gimbal }
 
 @Composable
 private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideoFrames: Flow<H264VideoFrame>, modifier: Modifier = Modifier) {
@@ -470,6 +484,81 @@ private fun GsCameraSettingsDialog(
 }
 
 @Composable
+private fun GsGimbalDialog(
+    state: XStarState,
+    enabled: Boolean,
+    onPitch: (Double) -> Unit,
+    onRecenter: () -> Unit,
+    onCalibrate: () -> Unit,
+    onConfigure: (Double, Double, Double) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var pitch by remember { mutableFloatStateOf((state.gimbal.pitchDeg ?: 0.0).toFloat()) }
+    var sensitivity by remember { mutableFloatStateOf((state.gimbal.sensitivity ?: .5).toFloat()) }
+    var smoothing by remember { mutableFloatStateOf((state.gimbal.smoothing ?: .6).toFloat()) }
+    var pitchSpeed by remember { mutableFloatStateOf((state.gimbal.pitchSpeed ?: .5).toFloat()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GIMBAL CONTROL") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                GsSettingLine("Status", state.gimbal.status ?: "Unavailable")
+                GsSettingLine("Calibration", when (state.gimbal.calibrated) {
+                    true -> "Calibrated"
+                    false -> "Required"
+                    null -> "Unknown"
+                })
+                GimbalSlider("Pitch", pitch, -90f..30f, "°") { pitch = it }
+                GimbalSlider("Sensitivity", sensitivity, 0f..1f, "") { sensitivity = it }
+                GimbalSlider("Smoothing", smoothing, 0f..1f, "") { smoothing = it }
+                GimbalSlider("Pitch speed", pitchSpeed, .1f..1f, "") { pitchSpeed = it }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { onRecenter(); onDismiss() },
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("RECENTER") }
+                    OutlinedButton(
+                        onClick = { onCalibrate(); onDismiss() },
+                        enabled = enabled && state.aircraft.armed != true && (state.navigation.altitudeM ?: 1.0) <= .2,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("CALIBRATE") }
+                }
+                if (!enabled) Text("Gimbal writes are available only in the isolated simulator.", color = GsColors.Amber, fontSize = 10.sp)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
+        confirmButton = {
+            Button(
+                enabled = enabled,
+                onClick = {
+                    onPitch(pitch.toDouble())
+                    onConfigure(sensitivity.toDouble(), smoothing.toDouble(), pitchSpeed.toDouble())
+                    onDismiss()
+                }
+            ) { Text("APPLY") }
+        }
+    )
+}
+
+@Composable
+private fun GimbalSlider(
+    title: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    suffix: String,
+    onValue: (Float) -> Unit
+) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(title, color = GsColors.White)
+            Text("%.1f%s".format(value, suffix), color = GsColors.Orange, fontFamily = FontFamily.Monospace)
+        }
+        Slider(value = value, onValueChange = onValue, valueRange = range)
+    }
+}
+
+@Composable
 private fun <T> CameraChoiceRow(
     title: String,
     options: List<T>,
@@ -581,6 +670,7 @@ private fun GsCameraRail(
     onPhoto: () -> Unit,
     onExposure: () -> Unit,
     onCameraSettings: () -> Unit,
+    onGimbal: () -> Unit,
     commandEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -593,7 +683,7 @@ private fun GsCameraRail(
         )
         GsRailButton("◉", "PHOTO", if (source == TelemetrySource.SIMULATOR && commandEnabled) onPhoto else ({ }))
         GsRailButton("EV", state.camera.exposureCompensationEv?.let { "%+.1f".format(it) } ?: "AUTO", onExposure)
-        GsRailButton("↕", state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL") { }
+        GsRailButton("↕", state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL", onGimbal)
         GsRailButton("⚙", state.camera.mode ?: "CAM", onCameraSettings)
     }
 }

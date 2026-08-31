@@ -89,4 +89,26 @@ class XStarReducerTest {
         assertEquals(24_000L, state.camera.storageRemainingMb)
     }
 
+    @Test
+    fun gimbalSnapshotNormalizesCalibrationAndResponseSettings() {
+        val state = XStarReducer.reduce(
+            XStarState(),
+            XStarEvent.GimbalSnapshot(
+                pitchDeg = -35.0,
+                status = "READY",
+                sensitivity = .7,
+                smoothing = .8,
+                pitchSpeed = .4,
+                calibrated = true
+            ),
+            1L
+        )
+
+        assertEquals(-35.0, state.gimbal.pitchDeg)
+        assertEquals(.7, state.gimbal.sensitivity)
+        assertEquals(.8, state.gimbal.smoothing)
+        assertEquals(.4, state.gimbal.pitchSpeed)
+        assertTrue(state.gimbal.calibrated == true)
+    }
+
 }

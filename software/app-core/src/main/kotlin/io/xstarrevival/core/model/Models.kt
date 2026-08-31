@@ -102,7 +102,11 @@ data class CameraState(
 
 data class GimbalState(
     val pitchDeg: Double? = null,
-    val status: String? = null
+    val status: String? = null,
+    val sensitivity: Double? = null,
+    val smoothing: Double? = null,
+    val pitchSpeed: Double? = null,
+    val calibrated: Boolean? = null
 )
 
 data class ImageLinkState(
