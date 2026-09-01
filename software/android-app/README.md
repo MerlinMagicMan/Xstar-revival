@@ -29,6 +29,13 @@ change only virtual state: the simulator module has no USB, radio, official-SDK,
 dependency. Takeoff, landing, yaw, pitch, roll, altitude, gimbal tilt, battery load, position, and
 virtual recording state can therefore be exercised without an aircraft.
 
+While the Flight Simulator source is active, Android HID/gamepad events can drive the same
+simulator command and control paths from a physical controller. The app normalizes the device's
+reported axis ranges, applies the configured dead zone/expo/sensitivity profile, and ignores those
+events for every non-simulator telemetry source. Simulator telemetry can also be broadcast over the
+versioned, receive-only Unreal bridge described in
+[`docs/CONTROLLER-IN-LOOP-SIMULATOR.md`](../../docs/CONTROLLER-IN-LOOP-SIMULATOR.md).
+
 Discrete simulator actions are routed through app core's normalized command dispatcher. The
 cockpit disables overlapping actions while a command is active and shows the current command phase
 and validation/transport detail. Completion means the expected simulator state was observed, not

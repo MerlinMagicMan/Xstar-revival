@@ -7,6 +7,7 @@ on:
       - 'software/android-autel-bridge/**'
       - 'software/android-sdk-probe/**'
       - 'software/app-core/**'
+      - 'simulator/unreal/**'
       - '.github/workflows/android-app.yml'
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - 'software/android-autel-bridge/**'
       - 'software/android-sdk-probe/**'
       - 'software/app-core/**'
+      - 'simulator/unreal/**'
       - '.github/workflows/android-app.yml'
 
 permissions:
@@ -39,6 +41,9 @@ jobs:
 
       - name: Verify official SDK binding stays receive-only
         run: python3 software/android-autel-bridge/tools/verify_read_only_binding.py
+
+      - name: Verify Unreal simulator scaffold and protocol boundary
+        run: python3 simulator/unreal/tools/verify_scaffold.py
 
       - name: Test app core, app behavior, and lint
         working-directory: software/android-app

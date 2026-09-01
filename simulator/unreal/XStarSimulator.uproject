@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Simulation",
+  "Description": "High-fidelity visualizer for the isolated X-Star Ground Station simulator.",
+  "Modules": [
+    {
+      "Name": "XStarSimulator",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
