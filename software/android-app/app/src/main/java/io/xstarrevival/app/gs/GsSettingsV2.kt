@@ -3,6 +3,8 @@ package io.xstarrevival.app.gs
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import io.xstarrevival.app.TelemetrySource
+import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 
 enum class GsSettingsFamily(val title: String, val subtitle: String) {
@@ -57,7 +60,8 @@ fun GsSettingsV2Screen(
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorControllerCalibration: () -> Unit,
-    onBatteryHistory: () -> Unit
+    onBatteryHistory: () -> Unit,
+    commandHistory: List<CommandStatus>
 ) {
     val context = LocalContext.current
     val store = remember(context) { GsSettingsStore(context.applicationContext) }
@@ -91,7 +95,7 @@ fun GsSettingsV2Screen(
             }
         }
         Card(Modifier.weight(1f).fillMaxHeight(), colors = CardDefaults.cardColors(containerColor = GsColors.Panel), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxSize().padding(22.dp)) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
                 Text(selected.title.uppercase(), color = GsColors.Orange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(14.dp))
                 when (selected) {
@@ -113,7 +117,9 @@ fun GsSettingsV2Screen(
                     )
                     GsSettingsFamily.BATTERY -> BatterySettings(settings, update, onBatteryHistory)
                     GsSettingsFamily.GIMBAL -> GimbalSettings(settings, update)
-                    GsSettingsFamily.GENERAL -> GeneralSettings(settings, update)
+                    GsSettingsFamily.GENERAL -> GeneralSettings(settings, update, state, source, commandHistory) {
+                        shareDiagnosticReport(context, state, source, commandHistory, settings.developerMode)
+                    }
                 }
             }
         }
@@ -267,7 +273,15 @@ private fun GimbalSettings(settings: GsUserSettings, update: (GsUserSettings) ->
 }
 
 @Composable
-private fun GeneralSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+private fun GeneralSettings(
+    settings: GsUserSettings,
+    update: (GsUserSettings) -> Unit,
+    state: XStarState,
+    source: TelemetrySource,
+    commandHistory: List<CommandStatus>,
+    onExportDiagnostics: () -> Unit
+) {
+    var showFirmware by remember { mutableStateOf(false) }
     SettingsToggle("Metric units", "Meters, m/s and Celsius", settings.metricUnits) { update(settings.copy(metricUnits = it)) }
     SettingsToggle("High-visibility cockpit", "Increase HUD opacity and outdoor legibility", settings.highVisibility) { update(settings.copy(highVisibility = it)) }
     SettingsToggle("Audible safety alerts", "Battery, link loss, RTH and critical states", settings.audibleAlerts) { update(settings.copy(audibleAlerts = it)) }
@@ -275,8 +289,20 @@ private fun GeneralSettings(settings: GsUserSettings, update: (GsUserSettings) -
     SettingsToggle("Heading-up maps", "Rotate operational maps to aircraft heading", settings.mapHeadingUp) { update(settings.copy(mapHeadingUp = it)) }
     SettingsToggle("Local telemetry logs", "Store diagnostic data only on this device", settings.localLogs) { update(settings.copy(localLogs = it)) }
     SettingsToggle("Developer mode", "Expose protocol diagnostics and packet tools", settings.developerMode) { update(settings.copy(developerMode = it)) }
-    SettingsAction("Firmware information", "Aircraft, controller, camera and battery versions")
-    SettingsAction("Export diagnostics", "Create a support bundle without transmitting it automatically")
+    SettingsAction("Firmware information", "Aircraft, controller, camera and battery versions") { showFirmware = !showFirmware }
+    if (showFirmware) {
+        GsSectionCard("FIRMWARE / SYSTEM INFORMATION") {
+            GsSettingLine("Aircraft", state.aircraft.firmwareVersion ?: "Unavailable")
+            GsSettingLine("Controller", state.remote.firmwareVersion ?: "Unavailable")
+            GsSettingLine("Battery / BMS", state.battery.firmwareVersion ?: "Unavailable")
+            GsSettingLine("Camera", state.aircraft.componentVersions["camera"] ?: "Unavailable")
+            state.aircraft.componentVersions.toSortedMap().forEach { (component, version) ->
+                GsSettingLine(component, version)
+            }
+        }
+    }
+    SettingsAction("Export diagnostics", "Create a support bundle without transmitting it automatically", onClick = onExportDiagnostics)
+    if (settings.developerMode) GsDiagnosticsInspector(state, source, commandHistory)
 }
 
 @Composable

@@ -3,6 +3,7 @@ package io.xstarrevival.core.protocol.mavlink
 import io.xstarrevival.core.adapter.OpenXStarPlatformAdapter
 import io.xstarrevival.core.adapter.OpenXStarTransport
 import io.xstarrevival.core.model.ConnectionState
+import io.xstarrevival.core.model.ProtocolPacketDisposition
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -64,6 +65,12 @@ class StandardMavlinkDecoderTest {
             assertEquals(1L, state.diagnostics.counters["mavlink_opaque_frames"])
             assertEquals(1L, state.diagnostics.counters["mavlink_crc_failures"])
             assertEquals(1L, state.diagnostics.counters["mavlink_heartbeats"])
+            assertEquals("MAVLink 1", state.diagnostics.protocolVersion)
+            assertEquals(8, state.diagnostics.packets.size)
+            assertEquals(6, state.diagnostics.packets.count { it.disposition == ProtocolPacketDisposition.DECODED })
+            assertEquals(1, state.diagnostics.packets.count { it.disposition == ProtocolPacketDisposition.OPAQUE })
+            assertEquals(1, state.diagnostics.packets.count { it.disposition == ProtocolPacketDisposition.CRC_FAILURE })
+            assertTrue(state.diagnostics.packets.all { it.rawHex.isNotBlank() })
         } finally {
             platform.disconnect()
             advanceUntilIdle()

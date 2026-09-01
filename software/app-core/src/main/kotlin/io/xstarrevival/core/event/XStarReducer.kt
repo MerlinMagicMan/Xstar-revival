@@ -168,7 +168,13 @@ object XStarReducer {
                 )
             )
             is XStarEvent.DiagnosticNote -> state.copy(
-                diagnostics = state.diagnostics.copy(notes = state.diagnostics.notes + event.value)
+                diagnostics = state.diagnostics.copy(notes = (state.diagnostics.notes + event.value).takeLast(100))
+            )
+            is XStarEvent.ProtocolPacketObserved -> state.copy(
+                diagnostics = state.diagnostics.copy(
+                    protocolVersion = event.value.protocol,
+                    packets = (state.diagnostics.packets + event.value).takeLast(200)
+                )
             )
         }
         return next.copy(diagnostics = next.diagnostics.copy(lastUpdateEpochMs = nowEpochMs))

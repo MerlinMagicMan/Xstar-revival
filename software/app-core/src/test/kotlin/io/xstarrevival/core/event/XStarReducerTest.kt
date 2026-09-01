@@ -1,6 +1,8 @@
 package io.xstarrevival.core.event
 
 import io.xstarrevival.core.model.XStarState
+import io.xstarrevival.core.model.ProtocolPacketDisposition
+import io.xstarrevival.core.model.ProtocolPacketTrace
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -175,6 +177,26 @@ class XStarReducerTest {
         assertEquals("MAP", state.remote.buttonAssignments["C1"])
         assertEquals(-.4, state.remote.rollInput)
         assertEquals(.5, state.remote.gimbalWheelInput)
+    }
+
+    @Test
+    fun diagnosticPacketAndNoteBuffersAreBounded() {
+        var state = XStarState()
+        repeat(250) { index ->
+            state = XStarReducer.reduce(
+                state,
+                XStarEvent.ProtocolPacketObserved(
+                    ProtocolPacketTrace(index.toLong(), "TEST/1", index, 1, 4, ProtocolPacketDisposition.DECODED, "TEST", "00 01")
+                ),
+                index.toLong()
+            )
+            state = XStarReducer.reduce(state, XStarEvent.DiagnosticNote("note-$index"), index.toLong())
+        }
+
+        assertEquals(200, state.diagnostics.packets.size)
+        assertEquals(50L, state.diagnostics.packets.first().sequence)
+        assertEquals(100, state.diagnostics.notes.size)
+        assertEquals("note-150", state.diagnostics.notes.first())
     }
 
 }

@@ -146,6 +146,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     val replayState: StateFlow<CaptureReplayState> = replayTransport.playback
     val commandStatus: StateFlow<CommandStatus?> = simulatorCommands.latest
+    val commandHistory: StateFlow<List<CommandStatus>> = simulatorCommands.history
     val simulatorScenario: StateFlow<SimulatorScenario> = simulatorPlatform.scenario
     val missionExecution: StateFlow<MissionExecutionState> = simulatorPlatform.missionExecution
     val smartFlightExecution: StateFlow<SmartFlightExecutionState> = simulatorPlatform.smartFlightExecution

@@ -1,6 +1,7 @@
 package io.xstarrevival.core.event
 
 import io.xstarrevival.core.model.ConnectionState
+import io.xstarrevival.core.model.ProtocolPacketTrace
 import io.xstarrevival.core.model.WarningState
 
 sealed interface XStarEvent {
@@ -120,4 +121,5 @@ sealed interface XStarEvent {
     data class WarningObserved(val warning: WarningState) : XStarEvent
     data class DiagnosticCounter(val key: String, val value: Long) : XStarEvent
     data class DiagnosticNote(val value: String) : XStarEvent
+    data class ProtocolPacketObserved(val value: ProtocolPacketTrace) : XStarEvent
 }
