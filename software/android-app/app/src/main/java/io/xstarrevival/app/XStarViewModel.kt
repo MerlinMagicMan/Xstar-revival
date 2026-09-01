@@ -2,6 +2,8 @@ package io.xstarrevival.app
 
 import android.app.Application
 import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.xstarrevival.core.XStarPlatform
@@ -53,6 +55,8 @@ import io.xstarrevival.core.replay.CaptureReplayState
 import io.xstarrevival.core.replay.CaptureReplayTransport
 import io.xstarrevival.core.replay.StandardMavlinkDemoCapture
 import io.xstarrevival.core.sim.SimulatorControlInput
+import io.xstarrevival.core.sim.SimulatorControllerAction
+import io.xstarrevival.core.sim.SimulatorControllerResponseProfile
 import io.xstarrevival.core.sim.SimulatorCommandAdapter
 import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.sim.SimulatorXStarPlatform
@@ -97,6 +101,22 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         stateProvider = { simulatorPlatform.state.value },
         transport = SimulatorCommandAdapter(simulatorPlatform)
     )
+    private val simulatorGamepadInput = SimulatorGamepadInputAdapter(
+        profileProvider = {
+            val remote = simulatorPlatform.state.value.remote
+            SimulatorControllerResponseProfile(
+                stickMode = remote.stickMode ?: 2,
+                sensitivity = remote.sensitivity ?: .55,
+                deadZone = remote.deadZone ?: .05,
+                expo = remote.expo ?: .35,
+                gimbalWheelReversed = remote.gimbalWheelReversed ?: false
+            )
+        },
+        assignmentsProvider = { simulatorPlatform.state.value.remote.buttonAssignments },
+        onControls = simulatorPlatform::setControls,
+        onAction = ::handleSimulatorControllerAction
+    )
+    private val simulatorTelemetryBridge = SimulatorUdpTelemetryBridge(viewModelScope)
     private val replayTransport = CaptureReplayTransport(
         scope = viewModelScope,
         chunks = StandardMavlinkDemoCapture.chunks,
@@ -122,6 +142,8 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     )
     internal val controllerUsb: StateFlow<ControllerUsbUiState> = controllerUsbMonitor.state
     internal val controllerProbe: StateFlow<ControllerProbeUiState> = controllerUsbInputProbe.state
+    internal val simulatorControllerInput: StateFlow<SimulatorControllerInputUiState> = simulatorGamepadInput.state
+    val simulatorBridge: StateFlow<SimulatorBridgeUiState> = simulatorTelemetryBridge.state
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
@@ -236,6 +258,14 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setControls(input)
     }
 
+    fun handleSimulatorControllerMotion(event: MotionEvent): Boolean =
+        mutableSource.value == TelemetrySource.SIMULATOR && simulatorGamepadInput.handleMotion(event)
+
+    fun handleSimulatorControllerKey(event: KeyEvent): Boolean =
+        mutableSource.value == TelemetrySource.SIMULATOR && simulatorGamepadInput.handleKey(event)
+
+    fun releaseSimulatorController() = simulatorGamepadInput.release()
+
     fun setSimulatorScenario(value: SimulatorScenario) {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorPlatform.setScenario(value)
     }
@@ -309,6 +339,20 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopSimulatorHomeLock() {
         if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorCommands.dispatch(StopHomeLockCommand)
+    }
+
+    private fun handleSimulatorControllerAction(action: SimulatorControllerAction) {
+        if (mutableSource.value != TelemetrySource.SIMULATOR) return
+        when (action) {
+            SimulatorControllerAction.TOGGLE_ARM -> toggleSimulatorArm()
+            SimulatorControllerAction.TAKE_OFF -> simulatorTakeOff()
+            SimulatorControllerAction.LAND -> simulatorLand()
+            SimulatorControllerAction.RETURN_TO_HOME -> startSimulatorRth()
+            SimulatorControllerAction.CANCEL_RETURN_TO_HOME -> cancelSimulatorRth()
+            SimulatorControllerAction.TAKE_PHOTO -> takeSimulatorPhoto()
+            SimulatorControllerAction.TOGGLE_RECORDING -> toggleSimulatorRecording()
+            SimulatorControllerAction.RECENTER_GIMBAL -> recenterSimulatorGimbal()
+        }
     }
 
     fun toggleSimulatorArm() {
@@ -438,6 +482,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         platformCollectionJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             activePlatform.state.collect { next ->
                 mutableState.value = next
+                if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorTelemetryBridge.publish(next)
                 observeHeartbeat(next)
             }
         }
@@ -510,6 +555,7 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         controllerUsbInputProbe.close()
         replayTransport.pause()
         controllerUsbMonitor.close()
+        simulatorTelemetryBridge.close()
         super.onCleared()
     }
 

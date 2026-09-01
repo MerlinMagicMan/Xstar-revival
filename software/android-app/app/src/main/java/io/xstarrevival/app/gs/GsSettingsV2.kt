@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.xstarrevival.app.TelemetrySource
+import io.xstarrevival.app.SimulatorControllerInputUiState
+import io.xstarrevival.app.SimulatorBridgeUiState
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import androidx.compose.material.icons.Icons
@@ -51,6 +53,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 enum class GsSettingsFamily(val title: String, val subtitle: String) {
     FLIGHT("Flight Control", "Limits, RTH, Beginner Mode, ATTI and IOC"),
     REMOTE("Remote Controller", "Stick mode, calibration and response"),
+    SIMULATOR("Simulator & Unreal", "Controller loop, telemetry bridge and visualizer"),
     VIDEO("Video Link", "RF channel selection and diagnostics"),
     BATTERY("Aircraft Battery", "Warnings, reserves and health thresholds"),
     GIMBAL("Gimbal", "Pitch response, smoothing and calibration"),
@@ -61,6 +64,8 @@ enum class GsSettingsFamily(val title: String, val subtitle: String) {
 fun GsSettingsV2Screen(
     state: XStarState,
     source: TelemetrySource,
+    simulatorControllerInput: SimulatorControllerInputUiState,
+    simulatorBridge: SimulatorBridgeUiState,
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorControllerCalibration: () -> Unit,
@@ -114,9 +119,11 @@ fun GsSettingsV2Screen(
                         update,
                         state,
                         source,
+                        simulatorControllerInput,
                         onSimulatorControllerConfiguration,
                         onSimulatorControllerCalibration
                     )
+                    GsSettingsFamily.SIMULATOR -> SimulatorSettings(source, simulatorControllerInput, simulatorBridge)
                     GsSettingsFamily.VIDEO -> VideoLinkSettings(
                         settings,
                         update,
@@ -145,6 +152,30 @@ fun GsSettingsV2Screen(
 }
 
 @Composable
+private fun SimulatorSettings(
+    source: TelemetrySource,
+    controllerInput: SimulatorControllerInputUiState,
+    bridge: SimulatorBridgeUiState
+) {
+    GsSettingLine("Simulation source", if (source == TelemetrySource.SIMULATOR) "ACTIVE" else "Select Flight Simulator in Garage")
+    GsSettingLine("Controller-in-loop", controllerInput.deviceName ?: "Waiting for Android HID/gamepad input")
+    GsSettingLine("Telemetry bridge", if (bridge.lastError == null) "READY" else "ERROR")
+    GsSettingLine("Destination", bridge.destination)
+    GsSettingLine("Frames sent", bridge.framesSent.toString())
+    GsSettingLine("Last sequence", bridge.lastSequence?.toString() ?: "—")
+    GsSettingLine("Last error", bridge.lastError ?: "None")
+    Text(
+        "Start the desktop receiver with: python3 tools/run_simulator_bridge_receiver.py",
+        color = GsColors.White,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold
+    )
+    SafetyNote(
+        "Only simulated state is broadcast. The bridge has no receive socket and cannot address USB, the Autel SDK, a radio, or an aircraft."
+    )
+}
+
+@Composable
 private fun FlightControlSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
     SettingsToggle("Beginner Mode", "Restricts speed, altitude and radius", settings.beginnerMode) { update(settings.copy(beginnerMode = it)) }
     SettingsSlider("Maximum altitude", settings.maximumAltitudeM, 30f..500f, "m") { update(settings.copy(maximumAltitudeM = it)) }
@@ -161,6 +192,7 @@ private fun RemoteSettings(
     update: (GsUserSettings) -> Unit,
     state: XStarState,
     source: TelemetrySource,
+    simulatorControllerInput: SimulatorControllerInputUiState,
     onSimulatorConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorCalibration: () -> Unit
 ) {
@@ -206,6 +238,18 @@ private fun RemoteSettings(
     GsSettingLine("Calibration", state.remote.calibrated?.let { if (it) "Calibrated" else "Required" } ?: "Unknown")
     GsSettingLine("Active stick mode", state.remote.stickMode?.let { "Mode $it" } ?: "Unavailable")
     GsSettingLine(
+        "Physical simulator controller",
+        simulatorControllerInput.deviceName?.let { "$it · ${simulatorControllerInput.eventCount} events" }
+            ?: if (source == TelemetrySource.SIMULATOR) "Move a connected USB/Bluetooth controller" else "Available in Flight Simulator"
+    )
+    GsSettingLine(
+        "Physical input T/Y/P/R/G",
+        simulatorControllerInput.controls.let {
+            "%.2f / %.2f / %.2f / %.2f / %.2f".format(it.throttle, it.yaw, it.pitch, it.roll, it.gimbal)
+        }
+    )
+    GsSettingLine("Last simulator button", simulatorControllerInput.lastAction?.name?.replace('_', ' ') ?: "—")
+    GsSettingLine(
         "Stick input T/Y/P/R",
         listOf(state.remote.throttleInput, state.remote.yawInput, state.remote.pitchInput, state.remote.rollInput)
             .takeIf { values -> values.all { it != null } }
@@ -213,6 +257,11 @@ private fun RemoteSettings(
             ?: "Unavailable"
     )
     GsSettingLine("Gimbal wheel", state.remote.gimbalWheelInput?.let { "%.2f".format(it) } ?: "Unavailable")
+    Text(
+        "Gamepad map: START arm · A takeoff · B land · X photo · Y record · L-stick RTH · R-stick cancel RTH · L1/R1 use C1/C2.",
+        color = GsColors.Muted,
+        fontSize = 10.sp
+    )
     if (!canCommand) Text("Controller writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
     if (!grounded) Text("Controller calibration requires the aircraft landed and disarmed.", color = GsColors.Amber, fontSize = 10.sp)
 }

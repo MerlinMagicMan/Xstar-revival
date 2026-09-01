@@ -19,6 +19,13 @@ artifacts/
 *.pcap
 *.pcapng
 
+# Unreal Engine generated state
+simulator/unreal/Binaries/
+simulator/unreal/DerivedDataCache/
+simulator/unreal/Intermediate/
+simulator/unreal/Saved/
+simulator/unreal/.vs/
+
 .DS_Store
 Thumbs.db
 .env

@@ -1,8 +1,11 @@
 package io.xstarrevival.app
 
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import io.xstarrevival.app.gs.GsAcademyScreen
 import io.xstarrevival.app.gs.GsAircraftScreen
 import io.xstarrevival.app.gs.GsCockpitScreen
@@ -59,11 +61,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class GroundStationV2Activity : ComponentActivity() {
+    private val vm: XStarViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             GsTheme {
-                val vm: XStarViewModel = viewModel()
                 val state by vm.state.collectAsStateWithLifecycle()
                 val source by vm.source.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
@@ -72,8 +75,12 @@ class GroundStationV2Activity : ComponentActivity() {
                 val simulatorScenario by vm.simulatorScenario.collectAsStateWithLifecycle()
                 val missionExecution by vm.missionExecution.collectAsStateWithLifecycle()
                 val smartFlightExecution by vm.smartFlightExecution.collectAsStateWithLifecycle()
+                val simulatorControllerInput by vm.simulatorControllerInput.collectAsStateWithLifecycle()
+                val simulatorBridge by vm.simulatorBridge.collectAsStateWithLifecycle()
                 GroundStationV2App(
                     state, source, heartbeat, commandStatus, commandHistory, simulatorScenario, missionExecution, smartFlightExecution,
+                    simulatorControllerInput,
+                    simulatorBridge,
                     vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
@@ -95,6 +102,20 @@ class GroundStationV2Activity : ComponentActivity() {
             }
         }
     }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        vm.handleSimulatorControllerMotion(event) || super.dispatchGenericMotionEvent(event)
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        vm.handleSimulatorControllerKey(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        vm.handleSimulatorControllerKey(event) || super.onKeyUp(keyCode, event)
+
+    override fun onPause() {
+        vm.releaseSimulatorController()
+        super.onPause()
+    }
 }
 
 @Composable
@@ -107,6 +128,8 @@ private fun GroundStationV2App(
     simulatorScenario: SimulatorScenario,
     missionExecution: MissionExecutionState,
     smartFlightExecution: SmartFlightExecutionState,
+    simulatorControllerInput: SimulatorControllerInputUiState,
+    simulatorBridge: SimulatorBridgeUiState,
     availableSources: List<TelemetrySource>,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSource: (TelemetrySource) -> Unit,
@@ -371,6 +394,8 @@ private fun GroundStationV2App(
                 GsPage.SETTINGS -> GsSettingsV2Screen(
                     state,
                     source,
+                    simulatorControllerInput,
+                    simulatorBridge,
                     onSimulatorVideoLinkChannel,
                     onSimulatorControllerConfiguration,
                     onSimulatorControllerCalibration,
