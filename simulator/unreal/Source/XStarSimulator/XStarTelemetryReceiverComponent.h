@@ -1,11 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Common/UdpSocketReceiver.h"
 #include "Components/ActorComponent.h"
 #include "XStarTelemetryReceiverComponent.generated.h"
 
 class FSocket;
-class FUdpSocketReceiver;
 class FArrayReader;
 struct FIPv4Endpoint;
 
@@ -67,6 +67,7 @@ protected:
 private:
     FSocket* Socket = nullptr;
     TUniquePtr<FUdpSocketReceiver> Receiver;
+    bool bLoggedFirstTelemetry = false;
 
     void StartReceiver();
     void StopReceiver();
