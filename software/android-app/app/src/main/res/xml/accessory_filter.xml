@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <usb-accessory manufacturer="com.autel" model="Starlink" version="1.0" />
-    <usb-accessory manufacturer="com.autel" model="Autel Explorer" version="1.0" />
-    <!-- Exact legacy Android Open Accessory identity observed from an X-Star Premium controller. -->
-    <usb-accessory manufacturer="ammlab.org" model="HelloADK" version="1.0" />
-</resources>

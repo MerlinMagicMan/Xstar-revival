@@ -319,6 +319,9 @@ private fun GroundStationV2App(
                     onSimulatorVideoLinkChannel,
                     onSimulatorControllerConfiguration,
                     onSimulatorControllerCalibration,
+                    onSimulatorGimbalRecenter,
+                    onSimulatorGimbalCalibration,
+                    onSimulatorGimbalConfiguration,
                     { page = GsPage.AIRCRAFT },
                     commandHistory
                 )

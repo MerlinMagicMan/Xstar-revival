@@ -13,22 +13,40 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.xstarrevival.core.model.ConnectionState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AirplanemodeActive
+import androidx.compose.material.icons.filled.FlightTakeoff
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Settings
 
 @Composable
 fun GsNavigationRail(page: GsPage, onPage: (GsPage) -> Unit) {
@@ -42,16 +60,34 @@ fun GsNavigationRail(page: GsPage, onPage: (GsPage) -> Unit) {
         GsPage.entries.forEach { item ->
             val selected = item == page
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp).clickable { onPage(item) }
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                    .heightIn(min = 56.dp)
+                    .semantics {
+                        contentDescription = "${item.label} screen"
+                        role = Role.Tab
+                        this.selected = selected
+                    }
+                    .clickable { onPage(item) }
                     .background(if (selected) GsColors.Orange.copy(alpha = .14f) else Color.Transparent, RoundedCornerShape(12.dp))
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(item.glyph, color = if (selected) GsColors.Orange else GsColors.Muted, fontSize = 18.sp)
+                Icon(item.icon(), contentDescription = null, tint = if (selected) GsColors.Orange else GsColors.Muted, modifier = Modifier.size(20.dp))
                 Text(item.label, color = if (selected) GsColors.White else GsColors.Muted, fontSize = 10.sp)
             }
         }
     }
+}
+
+private fun GsPage.icon(): ImageVector = when (this) {
+    GsPage.GARAGE -> Icons.Default.Home
+    GsPage.COCKPIT -> Icons.Default.FlightTakeoff
+    GsPage.MISSIONS -> Icons.Default.Route
+    GsPage.RECORDS -> Icons.Default.History
+    GsPage.MEDIA -> Icons.Default.PhotoLibrary
+    GsPage.AIRCRAFT -> Icons.Default.AirplanemodeActive
+    GsPage.SETTINGS -> Icons.Default.Settings
+    GsPage.HELP -> Icons.Default.School
 }
 
 @Composable
@@ -98,9 +134,9 @@ fun GsSectionCard(title: String, modifier: Modifier = Modifier, content: @Compos
 
 @Composable
 fun GsSettingLine(label: String, value: String, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = GsColors.Muted)
-        Text(value, color = GsColors.White, fontFamily = FontFamily.Monospace)
+    Row(modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, color = GsColors.Muted, modifier = Modifier.weight(1f))
+        Text(value, color = GsColors.White, fontFamily = FontFamily.Monospace, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
     }
 }
 

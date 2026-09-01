@@ -1,5 +1,6 @@
 package io.xstarrevival.app
 
+import android.annotation.SuppressLint
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.view.Surface
@@ -73,6 +74,7 @@ fun H264CapturedVideo(
 }
 
 @Composable
+@SuppressLint("Recycle") // Surface is released on replacement, TextureView destruction, and composition disposal.
 private fun H264ReplaySurface(
     modifier: Modifier,
     streamKey: Any,

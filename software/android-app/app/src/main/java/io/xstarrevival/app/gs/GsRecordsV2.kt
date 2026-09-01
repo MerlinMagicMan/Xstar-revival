@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,12 @@ import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.delay
 import kotlin.math.max
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 
 enum class GsRecordsTab { FLIGHTS, FIND_AIRCRAFT }
 
@@ -107,7 +114,7 @@ private fun FlightListV2(records: List<PersistedFlightSummary>, onSelect: (Persi
                         Text(record.batteryStartPercent?.let { "$it%" } ?: "—", color = GsColors.Green, fontFamily = FontFamily.Monospace)
                         Text(" → ", color = GsColors.Muted)
                         Text(record.batteryEndPercent?.let { "$it%" } ?: "—", color = batteryAccent(record.batteryEndPercent), fontFamily = FontFamily.Monospace)
-                        Text("   ›", color = GsColors.Orange, fontSize = 26.sp)
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Open flight detail", tint = GsColors.Orange)
                     }
                 }
             }
@@ -117,6 +124,7 @@ private fun FlightListV2(records: List<PersistedFlightSummary>, onSelect: (Persi
 
 @Composable
 private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val samples = record.samples
     var replayIndex by remember(record.startedAtEpochMs) { mutableIntStateOf(0) }
     var playing by remember(record.startedAtEpochMs) { mutableStateOf(false) }
@@ -161,18 +169,21 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
                     OutlinedButton(
                         onClick = { playing = false; replayIndex = (replayIndex - 1).coerceAtLeast(0) },
                         enabled = replayIndex > 0
-                    ) { Text("◀") }
+                    ) { Icon(Icons.Default.SkipPrevious, contentDescription = "Previous replay sample") }
                     Button(
                         onClick = {
                             if (replayIndex >= samples.lastIndex) replayIndex = 0
                             playing = !playing
                         },
                         enabled = samples.size > 1
-                    ) { Text(if (playing) "Ⅱ PAUSE" else "▶ REPLAY") }
+                    ) {
+                        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
+                        Text(if (playing) "PAUSE" else "REPLAY")
+                    }
                     OutlinedButton(
                         onClick = { playing = false; replayIndex = (replayIndex + 1).coerceAtMost(samples.lastIndex) },
                         enabled = replayIndex < samples.lastIndex
-                    ) { Text("▶") }
+                    ) { Icon(Icons.Default.SkipNext, contentDescription = "Next replay sample") }
                 }
             }
         }
@@ -193,7 +204,10 @@ private fun FlightDetail(record: PersistedFlightSummary, modifier: Modifier = Mo
                 GsSettingLine("Heading", currentSample?.headingDeg?.let { "%.0f°".format(it) } ?: "—")
                 GsSettingLine("Battery", currentSample?.batteryPercent?.let { "$it%" } ?: "—")
             }
-            OutlinedButton(onClick = { }, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("EXPORT FLIGHT — NOT YET AVAILABLE") }
+            OutlinedButton(
+                onClick = { shareRecordExport(context, "X-Star flight ${record.startedAtEpochMs}", buildFlightExport(record)) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("EXPORT FLIGHT") }
         }
     }
 }
@@ -244,11 +258,63 @@ private fun RecoveryDetail(state: XStarState, recoveryPoints: List<RecoveryPoint
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("NAVIGATE TO LAST POSITION") }
-            OutlinedButton(onClick = { }, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("EXPORT RECOVERY PATH — NOT YET AVAILABLE") }
+            OutlinedButton(
+                onClick = { shareRecordExport(context, "X-Star recovery path", buildRecoveryExport(recoveryPoints)) },
+                enabled = recoveryPoints.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("EXPORT RECOVERY PATH") }
         }
     }
 }
 
 private fun formatDuration(ms: Long): String {
     val seconds=max(0L,ms/1000L); return "%02d:%02d".format(seconds/60L,seconds%60L)
+}
+
+internal fun buildFlightExport(record: PersistedFlightSummary): String = buildString {
+    appendLine("X-Star Ground Station flight export")
+    appendLine("started_epoch_ms,${record.startedAtEpochMs}")
+    appendLine("ended_epoch_ms,${record.endedAtEpochMs}")
+    appendLine("maximum_altitude_m,${record.maximumAltitudeM ?: ""}")
+    appendLine("maximum_speed_mps,${record.maximumSpeedMps ?: ""}")
+    appendLine("battery_start_percent,${record.batteryStartPercent ?: ""}")
+    appendLine("battery_end_percent,${record.batteryEndPercent ?: ""}")
+    appendLine()
+    appendLine("timestamp_epoch_ms,latitude_deg,longitude_deg,altitude_m,ground_speed_mps,heading_deg,battery_percent")
+    record.samples.forEach { sample ->
+        appendLine(listOf(
+            sample.timestampEpochMs,
+            sample.latitudeDeg ?: "",
+            sample.longitudeDeg ?: "",
+            sample.altitudeM ?: "",
+            sample.groundSpeedMps ?: "",
+            sample.headingDeg ?: "",
+            sample.batteryPercent ?: ""
+        ).joinToString(","))
+    }
+}
+
+internal fun buildRecoveryExport(points: List<RecoveryPoint>): String = buildString {
+    appendLine("X-Star Ground Station recovery path export")
+    appendLine("timestamp_epoch_ms,latitude_deg,longitude_deg,altitude_m,ground_speed_mps,heading_deg,battery_percent")
+    points.forEach { point ->
+        appendLine(listOf(
+            point.timestampEpochMs,
+            point.position.latitudeDeg,
+            point.position.longitudeDeg,
+            point.altitudeM ?: "",
+            point.groundSpeedMps ?: "",
+            point.headingDeg ?: "",
+            point.batteryPercent ?: ""
+        ).joinToString(","))
+    }
+}
+
+private fun shareRecordExport(context: android.content.Context, subject: String, body: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    runCatching { context.startActivity(Intent.createChooser(intent, "Export X-Star data")) }
 }
