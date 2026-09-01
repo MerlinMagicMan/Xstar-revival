@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -279,7 +280,12 @@ private fun GroundStationV2App(
         }
     }
 
-    Row(Modifier.fillMaxSize().background(GsColors.Ink)) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .background(GsColors.Ink)
+            .safeDrawingPadding()
+    ) {
         GsNavigationRail(page = page, onPage = { page = it })
         Box(Modifier.weight(1f).fillMaxHeight()) {
             when (page) {

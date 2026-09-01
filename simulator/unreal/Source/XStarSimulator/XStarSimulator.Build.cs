@@ -13,6 +13,9 @@ public class XStarSimulator : ModuleRules
             "InputCore",
             "Json",
             "Networking",
+            "PixelStreaming2",
+            "PixelStreaming2Core",
+            "PixelStreaming2Servers",
             "Sockets"
         });
     }

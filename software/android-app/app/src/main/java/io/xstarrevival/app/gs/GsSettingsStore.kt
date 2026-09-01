@@ -18,6 +18,7 @@ data class GsUserSettings(
     val controllerGimbalWheelReversed: Boolean = false,
     val videoChannelAutomatic: Boolean = true,
     val videoChannel: Int = 5,
+    val simulatorVideoUrl: String = DEFAULT_SIMULATOR_VIDEO_URL,
     val lowBatteryPercent: Int = 30,
     val criticalBatteryPercent: Int = 15,
     val missionReservePercent: Int = 25,
@@ -44,6 +45,7 @@ data class GsUserSettings(
         controllerC1Action = controllerC1Action.takeIf { it in controllerActions } ?: "TAKE_PHOTO",
         controllerC2Action = controllerC2Action.takeIf { it in controllerActions } ?: "RECENTER_GIMBAL",
         videoChannel = videoChannel.coerceIn(1, 13),
+        simulatorVideoUrl = normalizeSimulatorVideoUrl(simulatorVideoUrl),
         lowBatteryPercent = lowBatteryPercent.coerceIn(20, 50).coerceAtLeast(normalizedCritical + 1),
         criticalBatteryPercent = normalizedCritical,
         missionReservePercent = missionReservePercent.coerceIn(15, 50),
@@ -78,6 +80,8 @@ class GsSettingsStore(context: Context) {
         controllerGimbalWheelReversed = preferences.getBoolean("controller_gimbal_wheel_reversed", false),
         videoChannelAutomatic = preferences.getBoolean("video_channel_automatic", true),
         videoChannel = preferences.getInt("video_channel", 5),
+        simulatorVideoUrl = preferences.getString("simulator_video_url", DEFAULT_SIMULATOR_VIDEO_URL)
+            ?: DEFAULT_SIMULATOR_VIDEO_URL,
         lowBatteryPercent = preferences.getInt("low_battery_percent", 30),
         criticalBatteryPercent = preferences.getInt("critical_battery_percent", 15),
         missionReservePercent = preferences.getInt("mission_reserve_percent", 25),
@@ -111,6 +115,7 @@ class GsSettingsStore(context: Context) {
             .putBoolean("controller_gimbal_wheel_reversed", value.controllerGimbalWheelReversed)
             .putBoolean("video_channel_automatic", value.videoChannelAutomatic)
             .putInt("video_channel", value.videoChannel)
+            .putString("simulator_video_url", value.simulatorVideoUrl)
             .putInt("low_battery_percent", value.lowBatteryPercent)
             .putInt("critical_battery_percent", value.criticalBatteryPercent)
             .putInt("mission_reserve_percent", value.missionReservePercent)
