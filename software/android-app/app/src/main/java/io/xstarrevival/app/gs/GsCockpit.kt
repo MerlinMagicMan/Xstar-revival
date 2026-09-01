@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,7 @@ import io.xstarrevival.core.groundstation.SmartFlightMode
 import io.xstarrevival.core.groundstation.SmartFlightPhase
 import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.sim.SimulatorControlInput
+import io.xstarrevival.core.sim.SimulatorViewMode
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
@@ -102,7 +104,6 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
 
 @Composable
 fun GsCockpitScreen(
@@ -113,6 +114,7 @@ fun GsCockpitScreen(
     simulatorScenario: SimulatorScenario,
     smartFlight: SmartFlightExecutionState,
     liveVideoFrames: Flow<H264VideoFrame>,
+    simulatorViewMode: SimulatorViewMode,
     onSimulatorArm: () -> Unit,
     onSimulatorTakeOff: () -> Unit,
     onSimulatorLand: () -> Unit,
@@ -127,6 +129,7 @@ fun GsCockpitScreen(
     onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
+    onToggleSimulatorViewMode: () -> Unit,
     onStartRth: () -> Unit,
     onCancelRth: () -> Unit,
     onGoMissions: () -> Unit,
@@ -136,6 +139,7 @@ fun GsCockpitScreen(
     val userSettings = remember(context) { GsSettingsStore(context.applicationContext).load() }
     var lastAlertSignature by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<CockpitDialog?>(null) }
+    var overlayMode by rememberSaveable { mutableStateOf(CockpitOverlayMode.HUD) }
     val alert = state.warnings.maxByOrNull { it.severity.ordinal }
     val alertSignature = alert?.let { "${it.id}:${it.severity}:${it.message}" }
     LaunchedEffect(alertSignature, userSettings.audibleAlerts, userSettings.haptics) {
@@ -164,10 +168,12 @@ fun GsCockpitScreen(
     val interactiveLockActive = smartFlight.phase == SmartFlightPhase.ACTIVE &&
         smartFlight.mode in setOf(SmartFlightMode.COURSE_LOCK, SmartFlightMode.HOME_LOCK)
     val commandBusy = source == TelemetrySource.SIMULATOR && commandStatus?.phase?.isTerminal == false && !interactiveLockActive
-    val grounded = state.aircraft.armed == false && state.navigation.altitudeM?.let { it <= 0.2 } == true
+    val onGround = state.navigation.altitudeM?.let { it <= 0.2 } == true
     val airborne = state.aircraft.armed == true && state.navigation.altitudeM?.let { it > 0.2 } == true
     val rthActive = smartFlight.mode == SmartFlightMode.RETURN_TO_HOME && smartFlight.phase == SmartFlightPhase.ACTIVE
     val homeAvailable = state.navigation.homeLatitudeDeg != null && state.navigation.homeLongitudeDeg != null
+    val showHud = overlayMode != CockpitOverlayMode.CLEAN
+    val showMap = overlayMode == CockpitOverlayMode.FULL
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         GsVideoSurface(
             state,
@@ -176,60 +182,86 @@ fun GsCockpitScreen(
             userSettings.simulatorVideoUrl,
             Modifier.fillMaxSize()
         )
-        GsTopTelemetry(state, source, heartbeat, userSettings, Modifier.align(Alignment.TopCenter))
-        GsFlightRail(
-            onSmart = { dialog = CockpitDialog.SmartFlight },
-            onHealth = { dialog = CockpitDialog.Health },
-            onRth = { dialog = CockpitDialog.Rth },
-            onMap = onGoMissions,
-            onHome = { dialog = CockpitDialog.Home },
-            onScenario = if (source == TelemetrySource.SIMULATOR) ({ dialog = CockpitDialog.Scenario }) else null,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 14.dp),
-            highVisibility = userSettings.highVisibility
+        if (showHud) {
+            GsTopTelemetry(state, source, heartbeat, userSettings, Modifier.align(Alignment.TopCenter))
+            GsFlightRail(
+                onSmart = { dialog = CockpitDialog.SmartFlight },
+                onHealth = { dialog = CockpitDialog.Health },
+                onRth = { dialog = CockpitDialog.Rth },
+                onMap = onGoMissions,
+                onHome = if (showMap) ({ dialog = CockpitDialog.Home }) else null,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 10.dp, top = 56.dp, bottom = 8.dp),
+                highVisibility = userSettings.highVisibility
+            )
+            GsCameraRail(
+                state = state,
+                source = source,
+                onRecord = onSimulatorRecord,
+                onPhoto = onSimulatorPhoto,
+                onExposure = if (showMap) ({ dialog = CockpitDialog.Exposure }) else null,
+                onCameraSettings = { dialog = CockpitDialog.Camera },
+                onGimbal = { dialog = CockpitDialog.Gimbal },
+                commandEnabled = !commandBusy,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp, top = 56.dp, bottom = 8.dp),
+                highVisibility = userSettings.highVisibility
+            )
+            GsReadinessPill(
+                state,
+                Modifier.align(Alignment.TopEnd).padding(top = 49.dp, end = 78.dp),
+                onClick = { dialog = CockpitDialog.Health }
+            )
+        }
+        GsCockpitModeControls(
+            overlayMode = overlayMode,
+            simulatorViewMode = simulatorViewMode,
+            simulatorActive = source == TelemetrySource.SIMULATOR,
+            onOverlayMode = {
+                overlayMode = when (overlayMode) {
+                    CockpitOverlayMode.HUD -> CockpitOverlayMode.FULL
+                    CockpitOverlayMode.FULL -> CockpitOverlayMode.CLEAN
+                    CockpitOverlayMode.CLEAN -> CockpitOverlayMode.HUD
+                }
+            },
+            onViewMode = onToggleSimulatorViewMode,
+            onScenario = { dialog = CockpitDialog.Scenario },
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 78.dp, top = 47.dp)
         )
-        GsCameraRail(
-            state = state,
-            source = source,
-            onRecord = onSimulatorRecord,
-            onPhoto = onSimulatorPhoto,
-            onExposure = { dialog = CockpitDialog.Exposure },
-            onCameraSettings = { dialog = CockpitDialog.Camera },
-            onGimbal = { dialog = CockpitDialog.Gimbal },
-            commandEnabled = !commandBusy,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp),
-            highVisibility = userSettings.highVisibility
-        )
-        GsMiniMap(state, Modifier.align(Alignment.BottomStart).padding(18.dp), onClick = onGoMissions)
-        GsReadinessPill(state, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), onClick = { dialog = CockpitDialog.Health })
-        if (source == TelemetrySource.SIMULATOR) {
+        if (showMap) {
+            GsMiniMap(
+                state,
+                Modifier.align(Alignment.BottomStart).padding(start = 78.dp, bottom = 58.dp),
+                onClick = onGoMissions
+            )
+        }
+        if (source == TelemetrySource.SIMULATOR && showHud) {
             Row(
-                Modifier.align(Alignment.BottomEnd).padding(18.dp),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(onClick = { dialog = CockpitDialog.Controls }, enabled = !commandBusy) { Text("CONTROLS") }
-                OutlinedButton(onClick = onSimulatorArm, enabled = !commandBusy && grounded) {
+                OutlinedButton(onClick = onSimulatorArm, enabled = !commandBusy && onGround) {
                     Text(if (state.aircraft.armed == true) "DISARM" else "ARM")
                 }
-                Button(onClick = onSimulatorTakeOff, enabled = !commandBusy && grounded) { Text("TAKEOFF") }
+                Button(onClick = onSimulatorTakeOff, enabled = !commandBusy && onGround) { Text("TAKEOFF") }
                 OutlinedButton(
                     onClick = { dialog = CockpitDialog.Land },
                     enabled = !commandBusy && airborne && smartFlight.phase != SmartFlightPhase.ACTIVE
                 ) { Text("LAND") }
             }
             commandStatus?.let {
-                GsCommandStatusPill(it, Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 58.dp))
+                GsCommandStatusPill(it, Modifier.align(Alignment.TopStart).padding(start = 78.dp, top = 88.dp))
             }
             if (smartFlight.phase != SmartFlightPhase.IDLE) {
                 GsSmartFlightStatusPill(
                     smartFlight,
                     state,
-                    Modifier.align(Alignment.TopStart).padding(start = 94.dp, top = 112.dp)
+                    Modifier.align(Alignment.TopStart).padding(start = 78.dp, top = 132.dp)
                 )
             }
         }
         AnimatedVisibility(
             visible = state.warnings.isNotEmpty(),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 92.dp),
             enter = fadeIn(),
             exit = fadeOut()
         ) {
@@ -341,6 +373,7 @@ fun GsCockpitScreen(
 }
 
 private enum class CockpitDialog { Health, Rth, Land, SmartFlight, Home, Scenario, Controls, Exposure, Camera, Gimbal }
+private enum class CockpitOverlayMode { HUD, FULL, CLEAN }
 
 @Composable
 private fun GsVideoSurface(
@@ -387,14 +420,14 @@ private fun GsVideoSurface(
             source == TelemetrySource.SIMULATOR && unrealState.status == UnrealVideoStatus.LOADING ->
                 "CONNECTING TO UNREAL VIDEO — CONTROLS REMAIN LOCAL"
             source == TelemetrySource.SIMULATOR && !state.camera.video.receiving -> "VIDEO LINK LOST — TELEMETRY REMAINS"
-            source == TelemetrySource.SIMULATOR -> "UNREAL VIDEO — VALIDATED LOCAL COMMANDS"
+            source == TelemetrySource.SIMULATOR -> null
             source == TelemetrySource.MOCK -> "MOCK TELEMETRY"
             else -> null
         }
         message?.let {
             Text(
                 it,
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp).background(Color.Black.copy(alpha = .7f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = .7f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
                 color = GsColors.Amber,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
@@ -743,6 +776,47 @@ private fun GsTopTelemetry(
 }
 
 @Composable
+private fun GsCockpitModeControls(
+    overlayMode: CockpitOverlayMode,
+    simulatorViewMode: SimulatorViewMode,
+    simulatorActive: Boolean,
+    onOverlayMode: () -> Unit,
+    onViewMode: () -> Unit,
+    onScenario: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        GsCockpitModeChip("OVERLAY ${overlayMode.name}", onOverlayMode)
+        if (simulatorActive) {
+            GsCockpitModeChip("VIEW ${simulatorViewMode.name}", onViewMode, GsColors.Orange)
+            GsCockpitModeChip("SCENE", onScenario)
+        }
+    }
+}
+
+@Composable
+private fun GsCockpitModeChip(
+    label: String,
+    onClick: () -> Unit,
+    accent: Color = GsColors.White
+) {
+    Text(
+        label,
+        modifier = Modifier
+            .heightIn(min = 30.dp)
+            .background(Color.Black.copy(alpha = .76f), RoundedCornerShape(8.dp))
+            .border(1.dp, accent.copy(alpha = .42f), RoundedCornerShape(8.dp))
+            .semantics { contentDescription = label; role = Role.Button }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        color = accent,
+        fontSize = 8.sp,
+        fontWeight = FontWeight.Bold,
+        fontFamily = FontFamily.Monospace
+    )
+}
+
+@Composable
 private fun GsTelemetryItem(label: String, value: String, color: Color = GsColors.White) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = GsColors.Muted, fontSize = 9.sp)
@@ -756,18 +830,16 @@ private fun GsFlightRail(
     onHealth: () -> Unit,
     onRth: () -> Unit,
     onMap: () -> Unit,
-    onHome: () -> Unit,
-    onScenario: (() -> Unit)?,
+    onHome: (() -> Unit)?,
     modifier: Modifier = Modifier,
     highVisibility: Boolean = false
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         GsRailButton(Icons.Default.AutoAwesome, "SMART", onSmart, highVisibility = highVisibility)
         GsRailButton(Icons.Default.HealthAndSafety, "HEALTH", onHealth, highVisibility = highVisibility)
         GsRailButton(Icons.Default.Home, "RTH", onRth, highVisibility = highVisibility)
         GsRailButton(Icons.Default.Map, "MAP", onMap, highVisibility = highVisibility)
-        GsRailButton(Icons.Default.MyLocation, "HOME", onHome, highVisibility = highVisibility)
-        if (onScenario != null) GsRailButton(Icons.Default.Warning, "SCENARIO", onScenario, GsColors.Amber, highVisibility = highVisibility)
+        if (onHome != null) GsRailButton(Icons.Default.MyLocation, "HOME", onHome, highVisibility = highVisibility)
     }
 }
 
@@ -777,14 +849,14 @@ private fun GsCameraRail(
     source: TelemetrySource,
     onRecord: () -> Unit,
     onPhoto: () -> Unit,
-    onExposure: () -> Unit,
+    onExposure: (() -> Unit)?,
     onCameraSettings: () -> Unit,
     onGimbal: () -> Unit,
     commandEnabled: Boolean,
     modifier: Modifier = Modifier,
     highVisibility: Boolean = false
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         GsRailButton(
             icon = Icons.Default.FiberManualRecord,
             label = if (state.camera.recording == true) "STOP" else "REC",
@@ -802,7 +874,14 @@ private fun GsCameraRail(
             )
         }
         GsRailButton(Icons.Default.PhotoCamera, "PHOTO", onPhoto, enabled = source == TelemetrySource.SIMULATOR && commandEnabled, highVisibility = highVisibility)
-        GsRailButton(Icons.Default.Exposure, state.camera.exposureCompensationEv?.let { "%+.1f EV".format(it) } ?: "AUTO EV", onExposure, highVisibility = highVisibility)
+        if (onExposure != null) {
+            GsRailButton(
+                Icons.Default.Exposure,
+                state.camera.exposureCompensationEv?.let { "%+.1f EV".format(it) } ?: "AUTO EV",
+                onExposure,
+                highVisibility = highVisibility
+            )
+        }
         GsRailButton(Icons.Default.SwapVert, state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL", onGimbal, highVisibility = highVisibility)
         GsRailButton(Icons.Default.Tune, state.camera.mode ?: "CAM", onCameraSettings, highVisibility = highVisibility)
     }
@@ -950,7 +1029,7 @@ private fun GsRailButton(
     highVisibility: Boolean = false
 ) {
     Column(
-        Modifier.width(64.dp).heightIn(min = 56.dp).background(
+        Modifier.width(52.dp).heightIn(min = 48.dp).background(
             Color.Black.copy(alpha = when {
                 !enabled -> .56f
                 highVisibility -> .94f
@@ -960,11 +1039,11 @@ private fun GsRailButton(
         )
             .border(1.dp, Color.White.copy(alpha = .12f), RoundedCornerShape(12.dp))
             .semantics { contentDescription = label; role = Role.Button }
-            .clickable(enabled = enabled, onClick = onClick).padding(vertical = 9.dp),
+            .clickable(enabled = enabled, onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, contentDescription = null, tint = if (enabled) accent else GsColors.Faint, modifier = Modifier.size(20.dp))
-        Text(label, color = GsColors.Muted, fontSize = 8.sp)
+        Icon(icon, contentDescription = null, tint = if (enabled) accent else GsColors.Faint, modifier = Modifier.size(18.dp))
+        Text(label, color = GsColors.Muted, fontSize = 7.sp)
     }
 }
 
@@ -977,7 +1056,7 @@ private fun GsMiniMap(state: XStarState, modifier: Modifier = Modifier, onClick:
         state.navigation.homeLongitudeDeg?.let { longitude -> GeoPoint(latitude, longitude) }
     }
     Box(
-        modifier.size(190.dp, 120.dp).background(Color(0xDD10151B), RoundedCornerShape(14.dp))
+        modifier.size(150.dp, 94.dp).background(Color(0xDD10151B), RoundedCornerShape(14.dp))
             .border(1.dp, Color.White.copy(alpha = .16f), RoundedCornerShape(14.dp)).clickable(onClick = onClick)
     ) {
         GsOperationalMap(
@@ -1007,14 +1086,14 @@ private fun GsReadinessPill(state: XStarState, modifier: Modifier = Modifier, on
         GsReadiness.OFFLINE -> GsColors.Muted
     }
     Row(
-        modifier.heightIn(min = 56.dp).background(Color.Black.copy(alpha = .75f), RoundedCornerShape(999.dp))
+        modifier.heightIn(min = 34.dp).background(Color.Black.copy(alpha = .75f), RoundedCornerShape(999.dp))
             .border(1.dp, color.copy(alpha = .5f), RoundedCornerShape(999.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 9.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         GsDot(color)
         Spacer(Modifier.width(8.dp))
-        Text(readiness.label, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(readiness.label, color = color, fontWeight = FontWeight.Bold, fontSize = 9.sp)
     }
 }
 

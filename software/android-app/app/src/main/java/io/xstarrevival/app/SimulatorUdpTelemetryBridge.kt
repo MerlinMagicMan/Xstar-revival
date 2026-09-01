@@ -3,6 +3,7 @@ package io.xstarrevival.app
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.sim.SIMULATOR_BRIDGE_UDP_PORT
 import io.xstarrevival.core.sim.SimulatorBridgeProtocol
+import io.xstarrevival.core.sim.SimulatorViewMode
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -32,7 +33,12 @@ internal class SimulatorUdpTelemetryBridge(
     scope: CoroutineScope,
     private val clockMs: () -> Long = System::currentTimeMillis
 ) : AutoCloseable {
-    private data class PendingFrame(val sequence: Long, val emittedAtEpochMs: Long, val state: XStarState)
+    private data class PendingFrame(
+        val sequence: Long,
+        val emittedAtEpochMs: Long,
+        val state: XStarState,
+        val viewMode: SimulatorViewMode
+    )
 
     private val sequence = AtomicLong()
     private val pending = Channel<PendingFrame>(Channel.CONFLATED)
@@ -50,7 +56,8 @@ internal class SimulatorUdpTelemetryBridge(
                 val bytes = SimulatorBridgeProtocol.telemetryJson(
                     frame.state,
                     frame.sequence,
-                    frame.emittedAtEpochMs
+                    frame.emittedAtEpochMs,
+                    frame.viewMode
                 ).encodeToByteArray()
                 var sent = false
                 var lastFailure: String? = null
@@ -74,9 +81,9 @@ internal class SimulatorUdpTelemetryBridge(
         }
     }
 
-    fun publish(state: XStarState) {
+    fun publish(state: XStarState, viewMode: SimulatorViewMode) {
         val emittedAt = clockMs()
-        pending.trySend(PendingFrame(sequence.incrementAndGet(), emittedAt, state))
+        pending.trySend(PendingFrame(sequence.incrementAndGet(), emittedAt, state, viewMode))
     }
 
     override fun close() {

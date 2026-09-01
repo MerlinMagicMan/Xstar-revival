@@ -33,6 +33,7 @@ struct FXStarSimulatorTelemetry
     UPROPERTY(BlueprintReadOnly) double RollInput = 0.0;
     UPROPERTY(BlueprintReadOnly) double GimbalInput = 0.0;
     UPROPERTY(BlueprintReadOnly) double GimbalPitchDeg = 0.0;
+    UPROPERTY(BlueprintReadOnly) FString ViewMode = TEXT("FPV");
     UPROPERTY(BlueprintReadOnly) double BatteryPercent = 0.0;
     UPROPERTY(BlueprintReadOnly) bool bRecording = false;
 };

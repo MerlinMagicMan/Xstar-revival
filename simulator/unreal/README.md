@@ -11,7 +11,9 @@ This Unreal Engine 5.8 project is the high-fidelity visual layer for the isolate
 3. Run `tools/run_unreal_simulator.sh`. The first run installs Epic's matching Pixel Streaming frontend, opens the project in game mode, and serves a local viewer on port `8080`.
 4. On Android, choose **Flight Simulator** and connect. The pawn follows simulated latitude, longitude, altitude, attitude, gimbal, battery, and controller telemetry. The Cockpit view loads Unreal's landscape from `http://josephs-macbook-pro.local:8080/player.html` by default; change the local URL under **Settings → Simulator & Unreal** if the Mac hostname or LAN address differs.
 
-The initial pawn intentionally uses an engine cube so the networking and flight loop can be verified without downloading third-party assets. Replace it with the final X-Star model after the receiver compiles and live telemetry is visible.
+The simulator starts in the onboard **FPV** view. Use **VIEW FPV / VIEW CHASE** in the cockpit, the controller Select button, or assign `VIEW` to C1/C2 to switch to the external chase camera. The cockpit starts in the compact **HUD** layout; **OVERLAY HUD / FULL / CLEAN** cycles the map and nonessential flight overlays without hiding safety warnings.
+
+The initial pawn is a code-built X-Star-style quadcopter with a central shell, four motors and rotors, landing skids, and camera pod. It starts with its skids on the terrain at zero altitude. Replace the procedural body with the final licensed X-Star mesh when that production asset is available; the FPV/chase camera and telemetry attachments can stay unchanged.
 
 Pixel Streaming is configured as video-only in the Android client: the WebView consumes touch, key, mouse, and gamepad events and the player URL disables those browser inputs. The protocol data channel stays available for WebRTC session setup. Controller commands continue through the app's isolated simulator implementation rather than through the video page, and Unreal has no aircraft transmit path.
 

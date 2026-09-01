@@ -457,7 +457,7 @@ private fun SettingsAction(title: String, subtitle: String, enabled: Boolean = t
 }
 
 private fun nextControllerAction(current: String): String {
-    val actions = listOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "MAP")
+    val actions = listOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "VIEW", "MAP")
     return actions[(actions.indexOf(current).takeIf { it >= 0 } ?: 0).plus(1) % actions.size]
 }
 

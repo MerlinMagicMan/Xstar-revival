@@ -26,6 +26,18 @@ class SimulatorControllerButtonMapTest {
             SimulatorControllerAction.RECENTER_GIMBAL,
             SimulatorControllerButtonMap.actionFor(KeyEvent.KEYCODE_BUTTON_R1, mapOf("C2" to "RECENTER_GIMBAL"))
         )
+        assertEquals(
+            SimulatorControllerAction.TOGGLE_CAMERA_VIEW,
+            SimulatorControllerButtonMap.actionFor(KeyEvent.KEYCODE_BUTTON_R1, mapOf("C2" to "VIEW"))
+        )
         assertNull(SimulatorControllerButtonMap.actionFor(KeyEvent.KEYCODE_BUTTON_L1, mapOf("C1" to "MAP")))
+    }
+
+    @Test
+    fun selectSwitchesSimulatorCameraView() {
+        assertEquals(
+            SimulatorControllerAction.TOGGLE_CAMERA_VIEW,
+            SimulatorControllerButtonMap.actionFor(KeyEvent.KEYCODE_BUTTON_SELECT, emptyMap())
+        )
     }
 }

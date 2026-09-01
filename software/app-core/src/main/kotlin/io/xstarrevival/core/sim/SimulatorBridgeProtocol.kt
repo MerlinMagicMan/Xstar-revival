@@ -5,9 +5,16 @@ import io.xstarrevival.core.model.XStarState
 const val SIMULATOR_BRIDGE_PROTOCOL_VERSION = 1
 const val SIMULATOR_BRIDGE_UDP_PORT = 46_000
 
+enum class SimulatorViewMode { FPV, CHASE }
+
 /** Versioned, simulator-only telemetry envelope consumed by desktop and Unreal visualizers. */
 object SimulatorBridgeProtocol {
-    fun telemetryJson(state: XStarState, sequence: Long, emittedAtEpochMs: Long): String = buildString(1_024) {
+    fun telemetryJson(
+        state: XStarState,
+        sequence: Long,
+        emittedAtEpochMs: Long,
+        viewMode: SimulatorViewMode = SimulatorViewMode.FPV
+    ): String = buildString(1_024) {
         append('{')
         field("protocol", "xstar-simulator")
         comma()
@@ -71,6 +78,8 @@ object SimulatorBridgeProtocol {
         comma()
         append("\"camera\":{")
         field("mode", state.camera.mode)
+        comma()
+        field("viewMode", viewMode.name)
         comma()
         field("recording", state.camera.recording)
         comma()

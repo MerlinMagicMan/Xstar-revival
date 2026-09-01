@@ -49,7 +49,8 @@ class GsUserSettingsTest {
             haptics = false,
             mapHeadingUp = true,
             localLogs = false,
-            developerMode = true
+            developerMode = true,
+            controllerC2Action = "VIEW"
         ).normalized()
 
         assertTrue(!normalized.metricUnits)
@@ -59,6 +60,7 @@ class GsUserSettingsTest {
         assertTrue(normalized.mapHeadingUp)
         assertTrue(!normalized.localLogs)
         assertTrue(normalized.developerMode)
+        assertEquals("VIEW", normalized.controllerC2Action)
     }
 
     @Test
