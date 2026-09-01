@@ -167,5 +167,20 @@ data class DiagnosticsState(
     val source: String? = null,
     val lastUpdateEpochMs: Long? = null,
     val counters: Map<String, Long> = emptyMap(),
-    val notes: List<String> = emptyList()
+    val notes: List<String> = emptyList(),
+    val protocolVersion: String? = null,
+    val packets: List<ProtocolPacketTrace> = emptyList()
+)
+
+enum class ProtocolPacketDisposition { DECODED, OPAQUE, CRC_FAILURE }
+
+data class ProtocolPacketTrace(
+    val sequence: Long,
+    val protocol: String,
+    val messageId: Int,
+    val componentId: Int,
+    val lengthBytes: Int,
+    val disposition: ProtocolPacketDisposition,
+    val decodedName: String? = null,
+    val rawHex: String
 )

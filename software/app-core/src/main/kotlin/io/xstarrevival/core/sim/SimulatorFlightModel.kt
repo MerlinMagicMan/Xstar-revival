@@ -10,6 +10,8 @@ import io.xstarrevival.core.model.DiagnosticsState
 import io.xstarrevival.core.model.GimbalState
 import io.xstarrevival.core.model.ImageLinkState
 import io.xstarrevival.core.model.NavigationState
+import io.xstarrevival.core.model.ProtocolPacketDisposition
+import io.xstarrevival.core.model.ProtocolPacketTrace
 import io.xstarrevival.core.model.RemoteState
 import io.xstarrevival.core.model.VideoState
 import io.xstarrevival.core.model.XStarState
@@ -433,8 +435,17 @@ object SimulatorFlightModel {
             ),
             diagnostics = DiagnosticsState(
                 source = "local-simulator",
-                counters = mapOf("sim_steps" to (snapshot.elapsedSeconds * 20.0).toLong()),
-                notes = listOf("Software-only simulator; no hardware command path")
+                counters = mapOf(
+                    "sim_steps" to (snapshot.elapsedSeconds * 20.0).toLong(),
+                    "sim_packets" to (snapshot.elapsedSeconds * 10.0).toLong()
+                ),
+                notes = listOf("Software-only simulator; no hardware command path"),
+                protocolVersion = "X-Star Simulator Protocol 1",
+                packets = listOf(
+                    ProtocolPacketTrace(1, "SIM/1", 0, 1, 9, ProtocolPacketDisposition.DECODED, "HEARTBEAT", "53 49 4D 01 00 00 00 00 01"),
+                    ProtocolPacketTrace(2, "SIM/1", 24, 1, 18, ProtocolPacketDisposition.DECODED, "GPS", "53 49 4D 01 18 00 00 00 12"),
+                    ProtocolPacketTrace(3, "SIM/1", 147, 1, 16, ProtocolPacketDisposition.DECODED, "BATTERY", "53 49 4D 01 93 00 00 00 10")
+                )
             )
         )
     }

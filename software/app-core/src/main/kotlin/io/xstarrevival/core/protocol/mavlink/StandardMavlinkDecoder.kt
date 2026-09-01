@@ -2,6 +2,8 @@ package io.xstarrevival.core.protocol.mavlink
 
 import io.xstarrevival.core.adapter.OpenXStarDecoder
 import io.xstarrevival.core.event.XStarEvent
+import io.xstarrevival.core.model.ProtocolPacketDisposition
+import io.xstarrevival.core.model.ProtocolPacketTrace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
@@ -32,11 +34,29 @@ class StandardMavlinkDecoder : OpenXStarDecoder {
         candidates.forEach { frame ->
             frames += 1
             val definition = STANDARD_MESSAGES[frame.messageId]
-            if (definition == null || !frame.hasSupportedEnvelope) {
+            val disposition = when {
+                definition == null || !frame.hasSupportedEnvelope -> ProtocolPacketDisposition.OPAQUE
+                frame.payload.size < definition.minimumLength || !frame.hasValidCrc(definition.crcExtra) ->
+                    ProtocolPacketDisposition.CRC_FAILURE
+                else -> ProtocolPacketDisposition.DECODED
+            }
+            events += XStarEvent.ProtocolPacketObserved(
+                ProtocolPacketTrace(
+                    sequence = frames,
+                    protocol = frame.protocolVersion,
+                    messageId = frame.messageId,
+                    componentId = frame.componentId,
+                    lengthBytes = frame.raw.size,
+                    disposition = disposition,
+                    decodedName = standardMessageName(frame.messageId).takeIf { disposition == ProtocolPacketDisposition.DECODED },
+                    rawHex = frame.raw.joinToString(" ") { "%02X".format(it.toInt() and 0xff) }
+                )
+            )
+            if (disposition == ProtocolPacketDisposition.OPAQUE) {
                 opaqueFrames += 1
                 return@forEach
             }
-            if (frame.payload.size < definition.minimumLength || !frame.hasValidCrc(definition.crcExtra)) {
+            if (disposition == ProtocolPacketDisposition.CRC_FAILURE) {
                 crcFailures += 1
                 return@forEach
             }
@@ -191,6 +211,16 @@ class StandardMavlinkDecoder : OpenXStarDecoder {
         else -> "UNKNOWN ($type)"
     }
 
+    private fun standardMessageName(messageId: Int): String? = when (messageId) {
+        HEARTBEAT -> "HEARTBEAT"
+        SYS_STATUS -> "SYS_STATUS"
+        GPS_RAW_INT -> "GPS_RAW_INT"
+        ATTITUDE -> "ATTITUDE"
+        GLOBAL_POSITION_INT -> "GLOBAL_POSITION_INT"
+        BATTERY_STATUS -> "BATTERY_STATUS"
+        else -> null
+    }
+
     private fun Float.radiansToDegrees(): Double = toDouble() * 180.0 / PI
 
     private companion object {
@@ -224,6 +254,8 @@ class StandardMavlinkDecoder : OpenXStarDecoder {
 private data class MessageDefinition(val minimumLength: Int, val crcExtra: Int)
 
 private data class MavlinkFrame(
+    val raw: ByteArray,
+    val protocolVersion: String,
     val headerWithoutMagic: ByteArray,
     val payload: ByteArray,
     val checksum: Int,
@@ -271,6 +303,8 @@ private class MavlinkStreamScanner {
             val componentId = if (magic == MAVLINK_V1_MAGIC) raw[4].u8() else raw[6].u8()
             val hasSupportedEnvelope = magic == MAVLINK_V1_MAGIC || raw[2].u8() and MAVLINK_V2_SIGNED.inv() == 0
             frames += MavlinkFrame(
+                raw = raw,
+                protocolVersion = if (magic == MAVLINK_V1_MAGIC) "MAVLink 1" else "MAVLink 2",
                 headerWithoutMagic = raw.copyOfRange(1, 1 + headerLength),
                 payload = raw.copyOfRange(payloadOffset, checksumOffset),
                 checksum = raw[checksumOffset].u8() or (raw[checksumOffset + 1].u8() shl 8),

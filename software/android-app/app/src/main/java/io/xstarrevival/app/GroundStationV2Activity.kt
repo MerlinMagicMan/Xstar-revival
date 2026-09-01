@@ -66,11 +66,12 @@ class GroundStationV2Activity : ComponentActivity() {
                 val source by vm.source.collectAsStateWithLifecycle()
                 val heartbeat by vm.heartbeat.collectAsStateWithLifecycle()
                 val commandStatus by vm.commandStatus.collectAsStateWithLifecycle()
+                val commandHistory by vm.commandHistory.collectAsStateWithLifecycle()
                 val simulatorScenario by vm.simulatorScenario.collectAsStateWithLifecycle()
                 val missionExecution by vm.missionExecution.collectAsStateWithLifecycle()
                 val smartFlightExecution by vm.smartFlightExecution.collectAsStateWithLifecycle()
                 GroundStationV2App(
-                    state, source, heartbeat, commandStatus, simulatorScenario, missionExecution, smartFlightExecution,
+                    state, source, heartbeat, commandStatus, commandHistory, simulatorScenario, missionExecution, smartFlightExecution,
                     vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
@@ -100,6 +101,7 @@ private fun GroundStationV2App(
     source: TelemetrySource,
     heartbeat: HeartbeatUiState,
     commandStatus: CommandStatus?,
+    commandHistory: List<CommandStatus>,
     simulatorScenario: SimulatorScenario,
     missionExecution: MissionExecutionState,
     smartFlightExecution: SmartFlightExecutionState,
@@ -317,7 +319,8 @@ private fun GroundStationV2App(
                     onSimulatorVideoLinkChannel,
                     onSimulatorControllerConfiguration,
                     onSimulatorControllerCalibration,
-                    { page = GsPage.AIRCRAFT }
+                    { page = GsPage.AIRCRAFT },
+                    commandHistory
                 )
                 GsPage.HELP -> GsAcademyScreen()
             }
