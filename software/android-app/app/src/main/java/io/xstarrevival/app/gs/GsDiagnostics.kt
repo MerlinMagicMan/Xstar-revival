@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -93,13 +94,13 @@ fun GsDiagnosticsInspector(
         GsSettingLine("Protocol version", state.diagnostics.protocolVersion ?: "Unavailable")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PacketFilter.entries.forEach { filter ->
-                if (filter == packetFilter) Button(onClick = { packetFilter = filter }, modifier = Modifier.weight(1f)) { Text(filter.name, fontSize = 8.sp) }
-                else OutlinedButton(onClick = { packetFilter = filter }, modifier = Modifier.weight(1f)) { Text(filter.name, fontSize = 8.sp) }
+                if (filter == packetFilter) Button(onClick = { packetFilter = filter }, modifier = Modifier.weight(1f)) { Text(filter.name, fontSize = 10.sp) }
+                else OutlinedButton(onClick = { packetFilter = filter }, modifier = Modifier.weight(1f)) { Text(filter.name, fontSize = 10.sp) }
             }
         }
         packets.take(50).forEach { packet ->
             Column(
-                Modifier.fillMaxWidth().clickable { selectedPacket = packet }.padding(vertical = 5.dp)
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { selectedPacket = packet }.padding(vertical = 5.dp)
             ) {
                 Text("#${packet.sequence}  ${packet.decodedName ?: "MSG ${packet.messageId}"}", color = GsColors.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                 Text("${packet.protocol} · component ${packet.componentId} · ${packet.lengthBytes} bytes · ${packet.disposition}", color = GsColors.Muted, fontFamily = FontFamily.Monospace, fontSize = 9.sp)

@@ -2,6 +2,8 @@ package io.xstarrevival.app.gs
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -93,7 +95,7 @@ fun GsGarageScreen(
             Card(colors = CardDefaults.cardColors(containerColor = GsColors.Panel2), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("DATA SOURCE", color = GsColors.White, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         availableSources.forEach { option ->
                             if (source == option) Button(onClick = { onSource(option) }) { Text(option.label) }
                             else OutlinedButton(onClick = { onSource(option) }) { Text(option.label) }

@@ -1,5 +1,6 @@
 package io.xstarrevival.app
 
+import android.annotation.SuppressLint
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.view.Surface
@@ -38,6 +39,7 @@ data class LiveVideoUiState(
 
 /** Decodes the official SDK's receive-only H.264 callback beneath the cockpit HUD. */
 @Composable
+@SuppressLint("Recycle") // Surface is released on replacement, TextureView destruction, and composition disposal.
 fun H264LiveVideo(
     frames: Flow<H264VideoFrame>,
     modifier: Modifier = Modifier,

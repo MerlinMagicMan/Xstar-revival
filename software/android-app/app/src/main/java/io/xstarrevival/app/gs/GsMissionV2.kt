@@ -2,8 +2,11 @@ package io.xstarrevival.app.gs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -90,7 +94,7 @@ fun GsMissionV2Screen(
                 Text("MISSION CONTROL", color = GsColors.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 Text("Offline planning · Configure → Review → Execute", color = GsColors.Muted)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 GsMissionV2Mode.entries.forEach { option ->
                     if (mode == option) Button(onClick = { mode = option }) { Text(option.name) }
                     else OutlinedButton(onClick = { mode = option }) { Text(option.name) }
@@ -104,6 +108,7 @@ fun GsMissionV2Screen(
                 plans = plans,
                 active = active,
                 onSelect = { active = it },
+                onShowLibrary = { active = null },
                 onCreate = {
                     val plan = MissionPlan(UUID.randomUUID().toString(), "Untitled Mission", emptyList())
                     store.save(plan); plans = store.load(); active = plan
@@ -144,6 +149,7 @@ private fun PersistentWaypointPlanner(
     plans: List<MissionPlan>,
     active: MissionPlan?,
     onSelect: (MissionPlan) -> Unit,
+    onShowLibrary: () -> Unit,
     onCreate: () -> Unit,
     onSave: (MissionPlan) -> Unit,
     onDelete: (MissionPlan) -> Unit,
@@ -157,14 +163,25 @@ private fun PersistentWaypointPlanner(
     onCancelRth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    BoxWithConstraints(modifier) {
+        val showCompactEditor = maxWidth < 760.dp && active != null
+        if (showCompactEditor) {
+            Column(Modifier.fillMaxSize()) {
+                OutlinedButton(onClick = onShowLibrary) { Text("MISSION LIBRARY") }
+                Spacer(Modifier.height(8.dp))
+                MissionEditor(
+                    state, active!!, onSave, onDelete, source, execution, commandStatus,
+                    onStart, onPause, onResume, onAbort, onCancelRth, Modifier.weight(1f).fillMaxWidth()
+                )
+            }
+        } else Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.width(250.dp).fillMaxHeight()) {
             Button(onClick = onCreate, modifier = Modifier.fillMaxWidth()) { Text("+ NEW MISSION") }
             Spacer(Modifier.height(10.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(plans, key = { it.id }) { plan ->
                     Card(
-                        Modifier.fillMaxWidth().clickable { onSelect(plan) },
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { onSelect(plan) },
                         colors = CardDefaults.cardColors(containerColor = if (active?.id == plan.id) GsColors.Orange.copy(alpha=.16f) else GsColors.Panel)
                     ) {
                         Column(Modifier.padding(12.dp)) {
@@ -185,6 +202,7 @@ private fun PersistentWaypointPlanner(
                 onStart, onPause, onResume, onAbort, onCancelRth, Modifier.weight(1f).fillMaxHeight()
             )
         }
+    }
     }
 }
 
@@ -207,6 +225,7 @@ private fun MissionEditor(
     var draft by remember(original.id, original.waypoints.size) { mutableStateOf(original) }
     var selectedWaypoint by remember(original.id) { mutableStateOf<Int?>(draft.waypoints.indices.firstOrNull()) }
     var reviewOpen by remember { mutableStateOf(false) }
+    var deleteOpen by remember { mutableStateOf(false) }
     val validation = MissionValidator.validate(draft, state.takeIf { it.connection is ConnectionState.Connected })
     val review = MissionReviewAnalyzer.analyze(
         plan = draft,
@@ -286,7 +305,7 @@ private fun MissionEditor(
                         selectedWaypoint = n
                     }) { Text("+ WAYPOINT") }
                     OutlinedButton(onClick = { onSave(draft) }) { Text("SAVE") }
-                    OutlinedButton(onClick = { onDelete(original) }) { Text("DELETE") }
+                    OutlinedButton(onClick = { deleteOpen = true }) { Text("DELETE") }
                 }
             }
         }
@@ -299,7 +318,7 @@ private fun MissionEditor(
                     items(draft.waypoints.indices.toList()) { index ->
                         val wp = draft.waypoints[index]
                         Card(
-                            Modifier.fillMaxWidth().clickable { selectedWaypoint = index },
+                            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { selectedWaypoint = index },
                             colors = CardDefaults.cardColors(containerColor = if (selectedWaypoint == index) GsColors.Orange.copy(alpha=.14f) else GsColors.Panel2)
                         ) {
                             Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -411,6 +430,20 @@ private fun MissionEditor(
             dismissButton = { TextButton(onClick = { reviewOpen = false }) { Text("CANCEL") } },
             confirmButton = {
                 Button(onClick = { onSave(draft); onStart(draft); reviewOpen = false }) { Text("START MISSION") }
+            }
+        )
+    }
+    if (deleteOpen) {
+        AlertDialog(
+            onDismissRequest = { deleteOpen = false },
+            title = { Text("DELETE MISSION?") },
+            text = { Text("${original.name} will be removed from this device. This cannot be undone.") },
+            dismissButton = { TextButton(onClick = { deleteOpen = false }) { Text("CANCEL") } },
+            confirmButton = {
+                Button(onClick = {
+                    onDelete(original)
+                    deleteOpen = false
+                }) { Text("CONFIRM DELETE") }
             }
         )
     }

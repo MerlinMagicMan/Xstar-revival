@@ -1,12 +1,14 @@
 package io.xstarrevival.app.gs
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,13 +24,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,10 +42,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import io.xstarrevival.app.TelemetrySource
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 
 enum class GsSettingsFamily(val title: String, val subtitle: String) {
     FLIGHT("Flight Control", "Limits, RTH, Beginner Mode, ATTI and IOC"),
@@ -60,6 +64,9 @@ fun GsSettingsV2Screen(
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorControllerCalibration: () -> Unit,
+    onSimulatorGimbalRecenter: () -> Unit,
+    onSimulatorGimbalCalibration: () -> Unit,
+    onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
     onBatteryHistory: () -> Unit,
     commandHistory: List<CommandStatus>
 ) {
@@ -69,20 +76,22 @@ fun GsSettingsV2Screen(
     var settings by remember(store) { mutableStateOf(store.load()) }
     val update: (GsUserSettings) -> Unit = { next ->
         settings = next.normalized()
-    }
-    LaunchedEffect(settings) {
-        delay(250L)
         store.save(settings)
     }
-    Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(Modifier.width(290.dp).fillMaxHeight()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxWidth < 760.dp
+        val pagePadding = if (compact) 12.dp else 24.dp
+        val sidebarWidth = if (compact) 210.dp else 290.dp
+        Row(Modifier.fillMaxSize().padding(pagePadding), horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 16.dp)) {
+        Column(Modifier.width(sidebarWidth).fillMaxHeight()) {
             Text("SETTINGS", color = GsColors.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
             Text("Starlink-compatible organization", color = GsColors.Muted)
             Spacer(Modifier.height(16.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                 items(GsSettingsFamily.entries) { family ->
                     Card(
-                        Modifier.fillMaxWidth().clickable { selected = family },
+                        onClick = { selected = family },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         colors = CardDefaults.cardColors(containerColor = if (selected == family) GsColors.Orange.copy(alpha = .16f) else GsColors.Panel),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -116,13 +125,22 @@ fun GsSettingsV2Screen(
                         onSimulatorVideoLinkChannel
                     )
                     GsSettingsFamily.BATTERY -> BatterySettings(settings, update, onBatteryHistory)
-                    GsSettingsFamily.GIMBAL -> GimbalSettings(settings, update)
+                    GsSettingsFamily.GIMBAL -> GimbalSettings(
+                        settings,
+                        update,
+                        state,
+                        source,
+                        onSimulatorGimbalRecenter,
+                        onSimulatorGimbalCalibration,
+                        onSimulatorGimbalConfiguration
+                    )
                     GsSettingsFamily.GENERAL -> GeneralSettings(settings, update, state, source, commandHistory) {
                         shareDiagnosticReport(context, state, source, commandHistory, settings.developerMode)
                     }
                 }
             }
         }
+    }
     }
 }
 
@@ -147,7 +165,7 @@ private fun RemoteSettings(
     onSimulatorCalibration: () -> Unit
 ) {
     val canCommand = source == TelemetrySource.SIMULATOR
-    val grounded = state.aircraft.armed != true && (state.navigation.altitudeM ?: 1.0) <= .2
+    val grounded = state.aircraft.armed == false && state.navigation.altitudeM?.let { it <= .2 } == true
     SettingsToggle("Stick Mode 2", "Throttle/yaw left; pitch/roll right", settings.controllerMode2) { update(settings.copy(controllerMode2 = it)) }
     SettingsSlider("Stick sensitivity", settings.controllerSensitivity, .1f..1f, "") { update(settings.copy(controllerSensitivity = it)) }
     SettingsSlider("Center dead zone", settings.controllerDeadZone, 0f..0.2f, "") { update(settings.copy(controllerDeadZone = it)) }
@@ -233,17 +251,25 @@ private fun VideoLinkSettings(
     GsSettingLine("Bandwidth", state.imageLink.bandwidthMbps?.let { "%.1f Mbps".format(it) } ?: "Unavailable")
     Text("CHANNEL ANALYZER", color = GsColors.Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     val strengths = state.imageLink.channelStrengths
-    Row(Modifier.fillMaxWidth().height(96.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
+    Row(
+        Modifier.fillMaxWidth().height(96.dp).padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
         (1..13).forEach { channel ->
             val strength = strengths.getOrNull(channel - 1)?.coerceIn(0, 100) ?: 0
             val selected = channel == state.imageLink.channel
             androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).fillMaxHeight((strength / 100f).coerceAtLeast(.04f))
-                    .background(if (selected) GsColors.Orange else GsColors.Blue.copy(alpha = .72f), RoundedCornerShape(3.dp))
-                    .then(if (channel == settings.videoChannel) Modifier.border(1.dp, Color.White, RoundedCornerShape(3.dp)) else Modifier),
+                Modifier.width(48.dp).fillMaxHeight()
+                    .clickable { update(settings.copy(videoChannel = channel)) },
                 contentAlignment = Alignment.BottomCenter
             ) {
-                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().clickable { update(settings.copy(videoChannel = channel)) }.padding(horizontal = 1.dp)) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.fillMaxWidth().fillMaxHeight((strength / 100f).coerceAtLeast(.04f))
+                        .background(if (selected) GsColors.Orange else GsColors.Blue.copy(alpha = .72f), RoundedCornerShape(3.dp))
+                        .then(if (channel == settings.videoChannel) Modifier.border(1.dp, Color.White, RoundedCornerShape(3.dp)) else Modifier)
+                        .padding(horizontal = 1.dp)
+                ) {
                     Text(channel.toString(), Modifier.align(Alignment.BottomCenter), color = Color.White, fontSize = 7.sp)
                 }
             }
@@ -265,11 +291,33 @@ private fun BatterySettings(settings: GsUserSettings, update: (GsUserSettings) -
 }
 
 @Composable
-private fun GimbalSettings(settings: GsUserSettings, update: (GsUserSettings) -> Unit) {
+private fun GimbalSettings(
+    settings: GsUserSettings,
+    update: (GsUserSettings) -> Unit,
+    state: XStarState,
+    source: TelemetrySource,
+    onRecenter: () -> Unit,
+    onCalibration: () -> Unit,
+    onConfiguration: (Double, Double, Double) -> Unit
+) {
+    val canCommand = source == TelemetrySource.SIMULATOR
+    val grounded = state.aircraft.armed == false && state.navigation.altitudeM?.let { it <= .2 } == true
     SettingsSlider("Pitch speed", settings.gimbalPitchSpeed, .1f..1f, "") { update(settings.copy(gimbalPitchSpeed = it)) }
     SettingsSlider("Smoothing", settings.gimbalSmoothing, 0f..1f, "") { update(settings.copy(gimbalSmoothing = it)) }
-    SettingsAction("Recenter gimbal", "Return camera to neutral forward view")
-    SettingsAction("Gimbal calibration", "Run calibration after aircraft is level and stationary")
+    Button(
+        onClick = { onConfiguration(state.gimbal.sensitivity ?: .5, settings.gimbalSmoothing.toDouble(), settings.gimbalPitchSpeed.toDouble()) },
+        enabled = canCommand,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("APPLY GIMBAL PROFILE") }
+    SettingsAction("Recenter gimbal", "Return camera to neutral forward view", enabled = canCommand, onClick = onRecenter)
+    SettingsAction(
+        "Gimbal calibration",
+        "Run calibration after aircraft is level and stationary",
+        enabled = canCommand && grounded,
+        onClick = onCalibration
+    )
+    if (!canCommand) Text("Gimbal writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
+    if (!grounded) Text("Gimbal calibration requires the aircraft landed and disarmed.", color = GsColors.Amber, fontSize = 10.sp)
 }
 
 @Composable
@@ -332,7 +380,7 @@ private fun SettingsAction(title: String, subtitle: String, enabled: Boolean = t
     ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title, color = GsColors.White, fontWeight = FontWeight.Medium); Text(subtitle, color = GsColors.Muted, fontSize = 11.sp) }
-            Text("›", color = GsColors.Orange, fontSize = 24.sp)
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = GsColors.Orange)
         }
     }
 }

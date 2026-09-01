@@ -6,15 +6,15 @@ import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.groundstation.PreflightEvaluator
 import io.xstarrevival.core.groundstation.PreflightLevel
 
-enum class GsPage(val label: String, val glyph: String) {
-    GARAGE("Garage", "◆"),
-    COCKPIT("Fly", "✦"),
-    MISSIONS("Missions", "⌖"),
-    RECORDS("Flights", "≋"),
-    MEDIA("Media", "▣"),
-    AIRCRAFT("Aircraft", "◇"),
-    SETTINGS("Settings", "⚙"),
-    HELP("Academy", "?")
+enum class GsPage(val label: String) {
+    GARAGE("Garage"),
+    COCKPIT("Fly"),
+    MISSIONS("Missions"),
+    RECORDS("Flights"),
+    MEDIA("Media"),
+    AIRCRAFT("Aircraft"),
+    SETTINGS("Settings"),
+    HELP("Academy")
 }
 
 enum class GsReadiness { OFFLINE, CHECKING, READY, WARNING, CRITICAL }
