@@ -175,6 +175,11 @@ bool UXStarTelemetryReceiverComponent::ParseTelemetry(const FString& Json, FXSta
     OutTelemetry.GimbalInput = OptionalNumber(*Controller, TEXT("gimbal"));
     OutTelemetry.BatteryPercent = OptionalNumber(*Battery, TEXT("percent"));
     OutTelemetry.GimbalPitchDeg = OptionalNumber(*Camera, TEXT("gimbalPitchDeg"));
+    (*Camera)->TryGetStringField(TEXT("viewMode"), OutTelemetry.ViewMode);
+    if (OutTelemetry.ViewMode != TEXT("CHASE"))
+    {
+        OutTelemetry.ViewMode = TEXT("FPV");
+    }
     (*Camera)->TryGetBoolField(TEXT("recording"), OutTelemetry.bRecording);
     return true;
 }

@@ -43,7 +43,8 @@ enum class SimulatorControllerAction {
     CANCEL_RETURN_TO_HOME,
     TAKE_PHOTO,
     TOGGLE_RECORDING,
-    RECENTER_GIMBAL
+    RECENTER_GIMBAL,
+    TOGGLE_CAMERA_VIEW
 }
 
 /**

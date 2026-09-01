@@ -59,6 +59,7 @@ import io.xstarrevival.core.sim.SimulatorControllerAction
 import io.xstarrevival.core.sim.SimulatorControllerResponseProfile
 import io.xstarrevival.core.sim.SimulatorCommandAdapter
 import io.xstarrevival.core.sim.SimulatorScenario
+import io.xstarrevival.core.sim.SimulatorViewMode
 import io.xstarrevival.core.sim.SimulatorXStarPlatform
 import io.xstarrevival.core.video.H264VideoFrame
 import io.xstarrevival.core.video.H264CaptureStopReason
@@ -144,6 +145,8 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     internal val controllerProbe: StateFlow<ControllerProbeUiState> = controllerUsbInputProbe.state
     internal val simulatorControllerInput: StateFlow<SimulatorControllerInputUiState> = simulatorGamepadInput.state
     val simulatorBridge: StateFlow<SimulatorBridgeUiState> = simulatorTelemetryBridge.state
+    private val mutableSimulatorViewMode = MutableStateFlow(SimulatorViewMode.FPV)
+    val simulatorViewMode: StateFlow<SimulatorViewMode> = mutableSimulatorViewMode.asStateFlow()
 
     private var activePlatform: XStarPlatform = mockPlatform
     private var platformCollectionJob: Job? = null
@@ -352,7 +355,17 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
             SimulatorControllerAction.TAKE_PHOTO -> takeSimulatorPhoto()
             SimulatorControllerAction.TOGGLE_RECORDING -> toggleSimulatorRecording()
             SimulatorControllerAction.RECENTER_GIMBAL -> recenterSimulatorGimbal()
+            SimulatorControllerAction.TOGGLE_CAMERA_VIEW -> toggleSimulatorViewMode()
         }
+    }
+
+    fun toggleSimulatorViewMode() {
+        if (mutableSource.value != TelemetrySource.SIMULATOR) return
+        mutableSimulatorViewMode.value = when (mutableSimulatorViewMode.value) {
+            SimulatorViewMode.FPV -> SimulatorViewMode.CHASE
+            SimulatorViewMode.CHASE -> SimulatorViewMode.FPV
+        }
+        simulatorTelemetryBridge.publish(simulatorPlatform.state.value, mutableSimulatorViewMode.value)
     }
 
     fun toggleSimulatorArm() {
@@ -482,7 +495,9 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
         platformCollectionJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             activePlatform.state.collect { next ->
                 mutableState.value = next
-                if (mutableSource.value == TelemetrySource.SIMULATOR) simulatorTelemetryBridge.publish(next)
+                if (mutableSource.value == TelemetrySource.SIMULATOR) {
+                    simulatorTelemetryBridge.publish(next, mutableSimulatorViewMode.value)
+                }
                 observeHeartbeat(next)
             }
         }

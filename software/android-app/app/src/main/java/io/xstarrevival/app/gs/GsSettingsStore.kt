@@ -59,7 +59,7 @@ data class GsUserSettings(
 private fun Float.boundedOr(default: Float, minimum: Float, maximum: Float): Float =
     if (isFinite()) coerceIn(minimum, maximum) else default
 
-private val controllerActions = setOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "MAP")
+private val controllerActions = setOf("NONE", "TAKE_PHOTO", "RECORD", "RECENTER_GIMBAL", "VIEW", "MAP")
 
 class GsSettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("xstar-user-settings-v1", Context.MODE_PRIVATE)

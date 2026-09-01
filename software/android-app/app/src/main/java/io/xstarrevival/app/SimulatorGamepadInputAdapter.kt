@@ -37,6 +37,7 @@ internal object SimulatorControllerButtonMap {
         KeyEvent.KEYCODE_BUTTON_THUMBL -> SimulatorControllerAction.RETURN_TO_HOME
         KeyEvent.KEYCODE_BUTTON_THUMBR,
         KeyEvent.KEYCODE_BACK -> SimulatorControllerAction.CANCEL_RETURN_TO_HOME
+        KeyEvent.KEYCODE_BUTTON_SELECT -> SimulatorControllerAction.TOGGLE_CAMERA_VIEW
         KeyEvent.KEYCODE_BUTTON_L1 -> configuredAction(assignments["C1"])
         KeyEvent.KEYCODE_BUTTON_R1 -> configuredAction(assignments["C2"])
         else -> null
@@ -46,6 +47,7 @@ internal object SimulatorControllerButtonMap {
         "TAKE_PHOTO" -> SimulatorControllerAction.TAKE_PHOTO
         "RECORD" -> SimulatorControllerAction.TOGGLE_RECORDING
         "RECENTER_GIMBAL" -> SimulatorControllerAction.RECENTER_GIMBAL
+        "VIEW" -> SimulatorControllerAction.TOGGLE_CAMERA_VIEW
         else -> null
     }
 }

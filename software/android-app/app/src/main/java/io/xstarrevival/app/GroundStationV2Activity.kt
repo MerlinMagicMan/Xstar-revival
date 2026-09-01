@@ -56,6 +56,7 @@ import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.sim.SimulatorControlInput
+import io.xstarrevival.core.sim.SimulatorViewMode
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
@@ -78,10 +79,12 @@ class GroundStationV2Activity : ComponentActivity() {
                 val smartFlightExecution by vm.smartFlightExecution.collectAsStateWithLifecycle()
                 val simulatorControllerInput by vm.simulatorControllerInput.collectAsStateWithLifecycle()
                 val simulatorBridge by vm.simulatorBridge.collectAsStateWithLifecycle()
+                val simulatorViewMode by vm.simulatorViewMode.collectAsStateWithLifecycle()
                 GroundStationV2App(
                     state, source, heartbeat, commandStatus, commandHistory, simulatorScenario, missionExecution, smartFlightExecution,
                     simulatorControllerInput,
                     simulatorBridge,
+                    simulatorViewMode,
                     vm.availableSources, vm.liveVideoFrames,
                     vm::selectSource, vm::connect, vm::disconnect, vm::refresh,
                     vm::toggleSimulatorArm, vm::simulatorTakeOff, vm::simulatorLand, vm::toggleSimulatorRecording,
@@ -92,6 +95,7 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm::setSimulatorVideoLinkChannel,
                     vm::configureSimulatorController, vm::calibrateSimulatorController,
                     vm::setSimulatorScenario, vm::setSimulatorControls,
+                    vm::toggleSimulatorViewMode,
                     vm::startSimulatorMission, vm::pauseSimulatorMission,
                     vm::resumeSimulatorMission, vm::abortSimulatorMission,
                     vm::startSimulatorRth, vm::cancelSimulatorRth,
@@ -131,6 +135,7 @@ private fun GroundStationV2App(
     smartFlightExecution: SmartFlightExecutionState,
     simulatorControllerInput: SimulatorControllerInputUiState,
     simulatorBridge: SimulatorBridgeUiState,
+    simulatorViewMode: SimulatorViewMode,
     availableSources: List<TelemetrySource>,
     liveVideoFrames: Flow<H264VideoFrame>,
     onSource: (TelemetrySource) -> Unit,
@@ -154,6 +159,7 @@ private fun GroundStationV2App(
     onSimulatorControllerCalibration: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
+    onToggleSimulatorViewMode: () -> Unit,
     onStartMission: (MissionPlan) -> Unit,
     onPauseMission: () -> Unit,
     onResumeMission: () -> Unit,
@@ -312,11 +318,12 @@ private fun GroundStationV2App(
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
                     state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,
+                    simulatorViewMode,
                     onSimulatorArm, onSimulatorTakeOff, onSimulatorLand, onSimulatorRecord,
                     onSimulatorPhoto, onSimulatorCameraMode, onSimulatorExposure, onSimulatorCameraConfiguration,
                     onSimulatorGimbalPitch, onSimulatorGimbalRecenter,
                     onSimulatorGimbalCalibration, onSimulatorGimbalConfiguration,
-                    onSimulatorScenario, onSimulatorControls, onStartRth, onCancelRth,
+                    onSimulatorScenario, onSimulatorControls, onToggleSimulatorViewMode, onStartRth, onCancelRth,
                     { page = GsPage.MISSIONS }, { page = GsPage.AIRCRAFT }
                 )
                 GsPage.MISSIONS -> GsMissionV2Screen(
