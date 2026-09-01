@@ -45,6 +45,7 @@ void UXStarTelemetryReceiverComponent::EndPlay(const EEndPlayReason::Type EndPla
 void UXStarTelemetryReceiverComponent::StartReceiver()
 {
     StopReceiver();
+    bLoggedFirstTelemetry = false;
     Socket = FUdpSocketBuilder(TEXT("XStarSimulatorTelemetry"))
         .AsNonBlocking()
         .AsReusable()
@@ -92,6 +93,17 @@ void UXStarTelemetryReceiverComponent::HandleDatagram(
     {
         UE_LOG(LogTemp, Warning, TEXT("Ignored invalid simulator datagram from %s"), *Endpoint.ToString());
         return;
+    }
+    if (!bLoggedFirstTelemetry)
+    {
+        bLoggedFirstTelemetry = true;
+        UE_LOG(
+            LogTemp,
+            Display,
+            TEXT("X-Star simulator accepted telemetry sequence %lld from %s"),
+            Parsed.Sequence,
+            *Endpoint.ToString()
+        );
     }
     TWeakObjectPtr<UXStarTelemetryReceiverComponent> WeakThis(this);
     AsyncTask(ENamedThreads::GameThread, [WeakThis, Parsed]()
