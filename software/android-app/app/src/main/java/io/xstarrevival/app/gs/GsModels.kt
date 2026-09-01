@@ -31,7 +31,7 @@ fun XStarState.readiness(): GsReadinessState {
     val unavailable = report.checks.any {
         it.id in setOf("gps", "rc", "battery") && it.level == PreflightLevel.UNAVAILABLE
     }
-    val advisory = warnings.any { it.severity == Severity.WARNING } ||
+    val advisory = warnings.any { it.severity == Severity.ADVISORY || it.severity == Severity.WARNING } ||
         report.checks.any { it.level == PreflightLevel.ADVISORY }
     return when {
         critical -> GsReadinessState(GsReadiness.CRITICAL, "CRITICAL — ACTION REQUIRED")

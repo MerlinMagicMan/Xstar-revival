@@ -143,12 +143,12 @@ fun GsCockpitScreen(
             lastAlertSignature = null
         } else if (alertSignature != lastAlertSignature) {
             lastAlertSignature = alertSignature
-            if (userSettings.haptics) {
+            if (userSettings.haptics && (alert?.severity?.ordinal ?: 0) >= Severity.WARNING.ordinal) {
                 context.getSystemService(Vibrator::class.java)?.takeIf { it.hasVibrator() }?.vibrate(
                     VibrationEffect.createOneShot(if (alert?.severity == Severity.CRITICAL) 350L else 160L, VibrationEffect.DEFAULT_AMPLITUDE)
                 )
             }
-            if (userSettings.audibleAlerts || alert?.severity == Severity.CRITICAL) {
+            if (alert?.severity == Severity.CRITICAL || userSettings.audibleAlerts && alert?.severity == Severity.WARNING) {
                 val tone = runCatching {
                     ToneGenerator(AudioManager.STREAM_ALARM, if (alert?.severity == Severity.CRITICAL) 100 else 75)
                 }.getOrNull()
@@ -236,6 +236,7 @@ fun GsCockpitScreen(
                         Text("${warning.severity.name}: ${warning.message}", color = when (warning.severity.name) {
                             "CRITICAL" -> GsColors.Red
                             "WARNING" -> GsColors.Amber
+                            "ADVISORY" -> GsColors.Blue
                             else -> GsColors.Blue
                         }, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }

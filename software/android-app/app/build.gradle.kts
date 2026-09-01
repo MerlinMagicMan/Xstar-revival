@@ -39,8 +39,8 @@ android {
         applicationId = "io.xstarrevival.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 3
+        versionName = "0.3.0-bench.1"
         buildConfigField("boolean", "AUTEL_SDK_AVAILABLE", autelSdkEnabled.toString())
         buildConfigField("String", "AUTEL_APP_KEY", "\"$escapedAutelAppKey\"")
         buildConfigField("String", "AUTEL_SDK_SHA256", "\"$autelSdkSha256\"")

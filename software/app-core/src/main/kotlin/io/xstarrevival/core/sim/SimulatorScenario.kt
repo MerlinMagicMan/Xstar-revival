@@ -73,7 +73,7 @@ object SimulatorScenarioApplier {
 
             SimulatorScenario.GPS_DEGRADED -> base.copy(
                 navigation = base.navigation.copy(satellites = 5, gpsFix = "DEGRADED"),
-                warnings = base.warnings + warning("sim-gps-degraded", Severity.WARNING, "GPS signal degraded — smart flight unavailable")
+                warnings = base.warnings + warning("sim-gps-degraded", Severity.ADVISORY, "GPS signal degraded — smart flight unavailable")
             )
             SimulatorScenario.GPS_LOST -> base.copy(
                 aircraft = base.aircraft.copy(flightMode = "ATTI"),
@@ -95,7 +95,7 @@ object SimulatorScenarioApplier {
 
             SimulatorScenario.WEAK_RC -> base.copy(
                 remote = base.remote.copy(signalPercent = 15),
-                warnings = base.warnings + warning("sim-weak-rc", Severity.WARNING, "Remote-controller link is weak")
+                warnings = base.warnings + warning("sim-weak-rc", Severity.ADVISORY, "Remote-controller link is weak")
             )
             SimulatorScenario.RC_LINK_LOSS -> base.copy(
                 remote = base.remote.copy(connected = false, signalPercent = 0),
@@ -107,7 +107,7 @@ object SimulatorScenarioApplier {
             )
             SimulatorScenario.WEAK_HD_LINK -> base.copy(
                 remote = base.remote.copy(imageSignalPercent = 12),
-                warnings = base.warnings + warning("sim-weak-hd", Severity.WARNING, "HD video link is weak")
+                warnings = base.warnings + warning("sim-weak-hd", Severity.ADVISORY, "HD video link is weak")
             )
             SimulatorScenario.VIDEO_LOSS -> base.copy(
                 camera = base.camera.copy(video = base.camera.video.copy(receiving = false)),
@@ -149,7 +149,7 @@ object SimulatorScenarioApplier {
                     remainingCapacityMah = 2_300,
                     dischargeCount = 240
                 ),
-                warnings = base.warnings + warning("sim-degraded-battery", Severity.WARNING, "Battery capacity is degraded")
+                warnings = base.warnings + warning("sim-degraded-battery", Severity.ADVISORY, "Battery capacity is degraded")
             )
             SimulatorScenario.FORCED_LANDING -> base.copy(
                 warnings = base.warnings + warning("sim-forced-landing", Severity.CRITICAL, "Forced landing active")
