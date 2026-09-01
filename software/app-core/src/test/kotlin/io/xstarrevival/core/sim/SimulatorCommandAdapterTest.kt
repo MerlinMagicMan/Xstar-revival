@@ -33,6 +33,8 @@ class SimulatorCommandAdapterTest {
         assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(StartRecordingCommand).phase)
         assertTrue(platform.state.value.camera.recording == true)
         assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(StopRecordingCommand).phase)
+        assertEquals(1, platform.state.value.camera.videosTaken)
+        assertEquals(0.0, platform.state.value.camera.recordingDurationSeconds)
         assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(SetGimbalPitchCommand(20.0)).phase)
         assertEquals(20.0, platform.state.value.gimbal.pitchDeg)
         assertEquals(CommandPhase.COMPLETED, dispatcher.dispatchAndAwait(TakeoffCommand).phase)

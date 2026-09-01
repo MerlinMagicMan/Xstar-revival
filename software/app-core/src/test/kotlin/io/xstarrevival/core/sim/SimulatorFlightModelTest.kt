@@ -97,4 +97,18 @@ class SimulatorFlightModelTest {
         assertTrue(state.yawDeg in 0.0..<360.0)
         assertTrue(state.gimbalPitchDeg in -90.0..30.0)
     }
+
+    @Test
+    fun `recording duration becomes completed video telemetry`() {
+        var state = SimulatorFlightModel.setRecording(SimulatorSnapshot(), true)
+        repeat(25) { state = SimulatorFlightModel.step(state, SimulatorControlInput(), .1) }
+        state = SimulatorFlightModel.setRecording(state, false)
+        val telemetry = SimulatorFlightModel.toXStarState(state)
+
+        assertEquals(1, telemetry.camera.videosTaken)
+        assertEquals(2.5, telemetry.camera.lastVideoDurationSeconds!!, .001)
+        assertEquals(0.0, telemetry.camera.recordingDurationSeconds)
+        assertEquals(29_676L, telemetry.camera.storageRemainingMb)
+        assertFalse(telemetry.camera.recording ?: true)
+    }
 }

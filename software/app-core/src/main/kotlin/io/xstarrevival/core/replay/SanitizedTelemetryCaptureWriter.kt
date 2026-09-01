@@ -109,6 +109,9 @@ class SanitizedTelemetryCaptureWriter(
                 "exposure_mode" to state.camera.exposureMode,
                 "iso" to state.camera.iso,
                 "shutter" to state.camera.shutter,
+                "photos_taken" to state.camera.photosTaken,
+                "videos_taken" to state.camera.videosTaken,
+                "recording_duration_seconds" to state.camera.recordingDurationSeconds,
                 "video_receiving" to state.camera.video.receiving,
                 "frames_received" to state.camera.video.framesReceived
             ),

@@ -77,7 +77,11 @@ class XStarReducerTest {
                 videoResolution = "4K",
                 frameRateFps = 30,
                 timerSeconds = 5,
-                storageRemainingMb = 24_000L
+                storageRemainingMb = 24_000L,
+                photosTaken = 4,
+                videosTaken = 2,
+                recordingDurationSeconds = 12.5,
+                lastVideoDurationSeconds = 44.0
             ),
             1L
         )
@@ -89,6 +93,10 @@ class XStarReducerTest {
         assertEquals("4K", state.camera.videoResolution)
         assertEquals(30, state.camera.frameRateFps)
         assertEquals(24_000L, state.camera.storageRemainingMb)
+        assertEquals(4, state.camera.photosTaken)
+        assertEquals(2, state.camera.videosTaken)
+        assertEquals(12.5, state.camera.recordingDurationSeconds)
+        assertEquals(44.0, state.camera.lastVideoDurationSeconds)
     }
 
     @Test

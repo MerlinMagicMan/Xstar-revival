@@ -681,11 +681,33 @@ private fun GsCameraRail(
             onClick = if (source == TelemetrySource.SIMULATOR && commandEnabled) onRecord else ({ }),
             accent = if (state.camera.recording == true) GsColors.Red else GsColors.Orange
         )
+        if (state.camera.recording == true) {
+            Text(state.camera.recordingDurationSeconds?.let(::formatRecordingTime) ?: "--:--", color = GsColors.Red, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            Text(
+                state.camera.storageRemainingMb?.let { "~${formatStorageTime(it, state.camera.videoResolution)} left" } ?: "storage —",
+                color = GsColors.Muted,
+                fontSize = 8.sp
+            )
+        }
         GsRailButton("◉", "PHOTO", if (source == TelemetrySource.SIMULATOR && commandEnabled) onPhoto else ({ }))
         GsRailButton("EV", state.camera.exposureCompensationEv?.let { "%+.1f".format(it) } ?: "AUTO", onExposure)
         GsRailButton("↕", state.gimbal.pitchDeg?.let { "${it.roundToInt()}°" } ?: "GIMBAL", onGimbal)
         GsRailButton("⚙", state.camera.mode ?: "CAM", onCameraSettings)
     }
+}
+
+private fun formatRecordingTime(seconds: Double): String {
+    val total = seconds.coerceAtLeast(0.0).toInt()
+    return "%02d:%02d".format(total / 60, total % 60)
+}
+
+private fun formatStorageTime(storageRemainingMb: Long, resolution: String?): String {
+    val megabytesPerSecond = when (resolution?.uppercase()) {
+        "4K" -> 8.0
+        "2.7K" -> 5.0
+        else -> 3.0
+    }
+    return formatRecordingTime(storageRemainingMb / megabytesPerSecond)
 }
 
 @Composable
