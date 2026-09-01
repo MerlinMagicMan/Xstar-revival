@@ -56,6 +56,10 @@ data class SimulatorSnapshot(
     val gimbalCalibrated: Boolean = true,
     val batteryPercent: Double = 88.0,
     val recording: Boolean = false,
+    val recordingDurationSeconds: Double = 0.0,
+    val videosTaken: Int = 0,
+    val lastVideoDurationSeconds: Double? = null,
+    val videoStorageUsedMb: Double = 0.0,
     val cameraMode: String = "VIDEO",
     val cameraIso: Int? = null,
     val cameraShutterSeconds: Double? = null,
@@ -128,11 +132,20 @@ object SimulatorFlightModel {
         else -> snapshot
     }
 
-    fun toggleRecording(snapshot: SimulatorSnapshot): SimulatorSnapshot =
-        snapshot.copy(recording = !snapshot.recording)
+    fun toggleRecording(snapshot: SimulatorSnapshot): SimulatorSnapshot = setRecording(snapshot, !snapshot.recording)
 
-    fun setRecording(snapshot: SimulatorSnapshot, recording: Boolean): SimulatorSnapshot =
-        snapshot.copy(recording = recording)
+    fun setRecording(snapshot: SimulatorSnapshot, recording: Boolean): SimulatorSnapshot = when {
+        recording == snapshot.recording -> snapshot
+        recording -> snapshot.copy(recording = true, recordingDurationSeconds = 0.0)
+        else -> snapshot.copy(
+            recording = false,
+            recordingDurationSeconds = 0.0,
+            videosTaken = snapshot.videosTaken + 1,
+            lastVideoDurationSeconds = snapshot.recordingDurationSeconds,
+            videoStorageUsedMb = snapshot.videoStorageUsedMb +
+                snapshot.recordingDurationSeconds.coerceAtLeast(1.0) * videoMegabytesPerSecond(snapshot.cameraVideoResolution)
+        )
+    }
 
     fun takePhoto(snapshot: SimulatorSnapshot): SimulatorSnapshot =
         snapshot.copy(photosTaken = snapshot.photosTaken + 1)
@@ -296,6 +309,7 @@ object SimulatorFlightModel {
             remoteRoll = input.roll,
             remoteGimbalWheel = input.gimbal,
             batteryPercent = (snapshot.batteryPercent - load * dt).coerceAtLeast(0.0),
+            recordingDurationSeconds = if (snapshot.recording) snapshot.recordingDurationSeconds + dt else snapshot.recordingDurationSeconds,
             elapsedSeconds = snapshot.elapsedSeconds + dt
         )
     }
@@ -370,8 +384,14 @@ object SimulatorFlightModel {
                 videoResolution = snapshot.cameraVideoResolution,
                 frameRateFps = snapshot.cameraFrameRateFps,
                 timerSeconds = snapshot.cameraTimerSeconds,
-                storageRemainingMb = (29_696L - snapshot.photosTaken * 8L).coerceAtLeast(0L),
+                storageRemainingMb = (
+                    29_696L - snapshot.photosTaken * 8L - snapshot.videoStorageUsedMb.toLong() -
+                        (snapshot.recordingDurationSeconds * videoMegabytesPerSecond(snapshot.cameraVideoResolution)).toLong()
+                    ).coerceAtLeast(0L),
                 photosTaken = snapshot.photosTaken,
+                videosTaken = snapshot.videosTaken,
+                recordingDurationSeconds = snapshot.recordingDurationSeconds,
+                lastVideoDurationSeconds = snapshot.lastVideoDurationSeconds,
                 histogramEnabled = snapshot.histogramEnabled,
                 overexposureWarningEnabled = snapshot.overexposureWarningEnabled,
                 gridEnabled = snapshot.gridEnabled,
@@ -426,6 +446,12 @@ object SimulatorFlightModel {
     }
 
     private fun normalizeHeading(value: Double): Double = (value % 360.0 + 360.0) % 360.0
+
+    private fun videoMegabytesPerSecond(resolution: String): Double = when (resolution.uppercase()) {
+        "4K" -> 8.0
+        "2.7K" -> 5.0
+        else -> 3.0
+    }
 
     private val simulatorChannelStrengths = listOf(28, 44, 36, 62, 51, 73, 88, 66, 49, 58, 41, 69, 33)
 }

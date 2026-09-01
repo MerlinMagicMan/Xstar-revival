@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import io.xstarrevival.app.gs.GsCockpitScreen
 import io.xstarrevival.app.gs.GsColors
 import io.xstarrevival.app.gs.GsGarageScreen
 import io.xstarrevival.app.gs.GsMediaScreen
+import io.xstarrevival.app.gs.GsMediaStore
 import io.xstarrevival.app.gs.GsMissionV2Screen
 import io.xstarrevival.app.gs.GsNavigationRail
 import io.xstarrevival.app.gs.GsPage
@@ -37,6 +39,9 @@ import io.xstarrevival.app.gs.GsTheme
 import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.app.gs.PersistedBatteryProfile
 import io.xstarrevival.app.gs.PersistedBatterySample
+import io.xstarrevival.app.gs.PersistedMediaItem
+import io.xstarrevival.app.gs.MediaOrigin
+import io.xstarrevival.app.gs.MediaTransferState
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionPlan
@@ -48,6 +53,8 @@ import io.xstarrevival.core.sim.SimulatorScenario
 import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class GroundStationV2Activity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,11 +145,15 @@ private fun GroundStationV2App(
     val context = LocalContext.current
     val persistence = remember(context) { GsPersistence(context.applicationContext) }
     val sessionTracker = remember(persistence) { GsSessionTracker(persistence) }
+    val mediaStore = remember(context) { GsMediaStore(context.applicationContext) }
+    val coroutineScope = rememberCoroutineScope()
     var recoveryPoints by remember { mutableStateOf<List<RecoveryPoint>>(persistence.loadRecoveryPoints()) }
     var flightSummaries by remember { mutableStateOf<List<PersistedFlightSummary>>(persistence.loadFlightSummaries()) }
     var batteryProfiles by remember { mutableStateOf<List<PersistedBatteryProfile>>(persistence.loadBatteryProfiles()) }
     var activeBatteryProfileId by remember { mutableStateOf(persistence.loadActiveBatteryProfileId()) }
     var batteryHistory by remember { mutableStateOf<List<PersistedBatterySample>>(activeBatteryProfileId?.let(persistence::loadBatteryHistory).orEmpty()) }
+    var mediaItems by remember { mutableStateOf<List<PersistedMediaItem>>(mediaStore.load()) }
+    var mediaTransfers by remember { mutableStateOf<List<MediaTransferState>>(emptyList()) }
     var lastRecoveryWriteMs by remember { mutableLongStateOf(0L) }
     var lastBatteryHistoryWriteMs by remember { mutableLongStateOf(0L) }
 
@@ -196,6 +207,15 @@ private fun GroundStationV2App(
         }
     }
 
+    LaunchedEffect(source, state.camera.photosTaken, state.camera.videosTaken) {
+        if (source == TelemetrySource.SIMULATOR) {
+            val now = System.currentTimeMillis()
+            val photosChanged = mediaStore.captureSimulatorPhotos(state.camera, now)
+            val videosChanged = mediaStore.captureSimulatorVideos(state.camera, now)
+            if (photosChanged || videosChanged) mediaItems = mediaStore.load()
+        }
+    }
+
     Row(Modifier.fillMaxSize().background(GsColors.Ink)) {
         GsNavigationRail(page = page, onPage = { page = it })
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -234,7 +254,39 @@ private fun GroundStationV2App(
                     onStopHomeLock = onStopHomeLock
                 )
                 GsPage.RECORDS -> GsRecordsV2Screen(state, recoveryPoints, flightSummaries)
-                GsPage.MEDIA -> GsMediaScreen(state)
+                GsPage.MEDIA -> GsMediaScreen(
+                    state = state,
+                    source = source,
+                    mediaItems = mediaItems,
+                    transfers = mediaTransfers,
+                    onDownload = { itemIds ->
+                        mediaItems.filter { it.id in itemIds && it.origin == MediaOrigin.AIRCRAFT }.forEach { item ->
+                            if (mediaTransfers.any { it.mediaId == item.id && !it.completed }) return@forEach
+                            coroutineScope.launch {
+                                val speed = (item.sizeBytes / 2L).coerceAtLeast(1L)
+                                mediaTransfers = mediaTransfers.filterNot { it.mediaId == item.id } +
+                                    MediaTransferState(item.id, item.fileName, 0, speed)
+                                (10..100 step 10).forEach { progress ->
+                                    delay(120L)
+                                    mediaTransfers = mediaTransfers.map { transfer ->
+                                        if (transfer.mediaId == item.id) transfer.copy(progressPercent = progress, completed = progress == 100)
+                                        else transfer
+                                    }
+                                }
+                                mediaStore.download(setOf(item.id))
+                                mediaItems = mediaStore.load()
+                            }
+                        }
+                    },
+                    onDelete = { itemIds ->
+                        mediaStore.delete(itemIds)
+                        mediaItems = mediaStore.load()
+                    },
+                    onToggleFavorite = { itemId ->
+                        mediaStore.toggleFavorite(itemId)
+                        mediaItems = mediaStore.load()
+                    }
+                )
                 GsPage.AIRCRAFT -> GsAircraftScreen(
                     state = state,
                     batteryProfiles = batteryProfiles,

@@ -77,7 +77,11 @@ sealed interface XStarEvent {
         val videoResolution: String? = null,
         val frameRateFps: Int? = null,
         val timerSeconds: Int? = null,
-        val storageRemainingMb: Long? = null
+        val storageRemainingMb: Long? = null,
+        val photosTaken: Int? = null,
+        val videosTaken: Int? = null,
+        val recordingDurationSeconds: Double? = null,
+        val lastVideoDurationSeconds: Double? = null
     ) : XStarEvent
 
     data class GimbalSnapshot(
