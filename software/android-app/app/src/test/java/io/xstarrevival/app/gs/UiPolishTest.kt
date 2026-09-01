@@ -55,4 +55,28 @@ class UiPolishTest {
         assertEquals("68.0°F", formatTemperature(20.0, metric = false))
         assertEquals("—", formatVerticalSpeed(null, metric = true))
     }
+
+    @Test
+    fun aircraftProfilesNormalizeIdentityAndLastKnownState() {
+        val profile = PersistedAircraftProfile(
+            id = "  ",
+            nickname = "  ",
+            model = "  ",
+            serialNumber = "  XS-001  ",
+            lastBatteryPercent = 140,
+            lastLatitudeDeg = 120.0,
+            lastLongitudeDeg = -220.0,
+            healthState = "INVALID",
+            createdAtEpochMs = 42L
+        ).normalized()
+
+        assertEquals("aircraft-42", profile.id)
+        assertEquals("My X-Star", profile.nickname)
+        assertEquals("X-Star Premium", profile.model)
+        assertEquals("XS-001", profile.serialNumber)
+        assertEquals(100, profile.lastBatteryPercent)
+        assertEquals(null, profile.lastLatitudeDeg)
+        assertEquals(null, profile.lastLongitudeDeg)
+        assertEquals("UNKNOWN", profile.healthState)
+    }
 }

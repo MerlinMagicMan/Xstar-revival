@@ -94,6 +94,38 @@ class GsPersistence(context: Context) {
         }.sortedByDescending { it.startedAtEpochMs }
     }
 
+    fun saveAircraftProfile(profile: PersistedAircraftProfile) {
+        val profiles = loadAircraftProfiles().filterNot { it.id == profile.id } + profile.normalized()
+        val encoded = JSONArray().also { array ->
+            profiles.sortedBy { it.createdAtEpochMs }.forEach { array.put(it.toJson()) }
+        }
+        prefs.edit().putString(KEY_AIRCRAFT_PROFILES, encoded.toString()).apply()
+    }
+
+    fun loadAircraftProfiles(): List<PersistedAircraftProfile> {
+        val array = runCatching { JSONArray(prefs.getString(KEY_AIRCRAFT_PROFILES, "[]")) }.getOrElse { JSONArray() }
+        return buildList {
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.toAircraftProfileOrNull()?.let(::add)
+            }
+        }.sortedBy { it.createdAtEpochMs }
+    }
+
+    fun deleteAircraftProfile(profileId: String) {
+        val profiles = loadAircraftProfiles().filterNot { it.id == profileId }
+        val encoded = JSONArray().also { array -> profiles.forEach { array.put(it.toJson()) } }
+        prefs.edit().putString(KEY_AIRCRAFT_PROFILES, encoded.toString()).apply()
+        if (loadActiveAircraftProfileId() == profileId) setActiveAircraftProfileId(profiles.firstOrNull()?.id)
+    }
+
+    fun setActiveAircraftProfileId(profileId: String?) {
+        prefs.edit().apply {
+            if (profileId == null) remove(KEY_ACTIVE_AIRCRAFT_PROFILE) else putString(KEY_ACTIVE_AIRCRAFT_PROFILE, profileId)
+        }.apply()
+    }
+
+    fun loadActiveAircraftProfileId(): String? = prefs.getString(KEY_ACTIVE_AIRCRAFT_PROFILE, null)
+
     fun ensureIdentifiedBatteryProfile(
         packId: String,
         ratedCapacityMah: Int?,
@@ -238,6 +270,8 @@ class GsPersistence(context: Context) {
     private companion object {
         const val KEY_RECOVERY = "recovery_points"
         const val KEY_FLIGHTS = "flight_summaries"
+        const val KEY_AIRCRAFT_PROFILES = "aircraft_profiles"
+        const val KEY_ACTIVE_AIRCRAFT_PROFILE = "active_aircraft_profile"
         const val KEY_BATTERY_PROFILES = "battery_profiles"
         const val KEY_ACTIVE_BATTERY_PROFILE = "active_battery_profile"
         const val KEY_BATTERY_HISTORY = "battery_history"
@@ -268,6 +302,32 @@ data class PersistedFlightSample(
     val headingDeg: Double?,
     val batteryPercent: Int?
 )
+
+data class PersistedAircraftProfile(
+    val id: String,
+    val nickname: String,
+    val model: String,
+    val serialNumber: String? = null,
+    val firmwareVersion: String? = null,
+    val lastConnectedEpochMs: Long? = null,
+    val lastBatteryPercent: Int? = null,
+    val lastLatitudeDeg: Double? = null,
+    val lastLongitudeDeg: Double? = null,
+    val healthState: String = "UNKNOWN",
+    val createdAtEpochMs: Long
+) {
+    fun normalized() = copy(
+        id = id.trim().take(80).ifEmpty { "aircraft-${createdAtEpochMs}" },
+        nickname = nickname.trim().take(40).ifEmpty { "My X-Star" },
+        model = model.trim().take(60).ifEmpty { "X-Star Premium" },
+        serialNumber = serialNumber?.trim()?.take(60)?.takeIf { it.isNotEmpty() },
+        firmwareVersion = firmwareVersion?.trim()?.take(60)?.takeIf { it.isNotEmpty() },
+        lastBatteryPercent = lastBatteryPercent?.coerceIn(0, 100),
+        lastLatitudeDeg = lastLatitudeDeg?.takeIf { it.isFinite() && it in -90.0..90.0 },
+        lastLongitudeDeg = lastLongitudeDeg?.takeIf { it.isFinite() && it in -180.0..180.0 },
+        healthState = healthState.takeIf { it in aircraftHealthStates } ?: "UNKNOWN"
+    )
+}
 
 data class PersistedBatteryProfile(
     val id: String,
@@ -302,6 +362,37 @@ data class PersistedBatterySample(
 }
 
 internal val batteryProfileKinds = setOf("ORIGINAL", "REBUILT", "AFTERMARKET", "CUSTOM", "ALTERNATE_BMS")
+internal val aircraftHealthStates = setOf("READY", "CHECKING", "WARNING", "CRITICAL", "OFFLINE", "UNKNOWN")
+
+private fun PersistedAircraftProfile.toJson() = JSONObject()
+    .put("id", id)
+    .put("nickname", nickname)
+    .put("model", model)
+    .putNullable("serial", serialNumber)
+    .putNullable("firmware", firmwareVersion)
+    .putNullable("lastConnected", lastConnectedEpochMs)
+    .putNullable("lastBattery", lastBatteryPercent)
+    .putNullable("lastLat", lastLatitudeDeg)
+    .putNullable("lastLon", lastLongitudeDeg)
+    .put("health", healthState)
+    .put("created", createdAtEpochMs)
+
+private fun JSONObject.toAircraftProfileOrNull(): PersistedAircraftProfile? {
+    val id = optString("id").takeIf { it.isNotBlank() } ?: return null
+    return PersistedAircraftProfile(
+        id = id,
+        nickname = optString("nickname", "My X-Star"),
+        model = optString("model", "X-Star Premium"),
+        serialNumber = optString("serial").takeIf { has("serial") && !isNull("serial") && it.isNotBlank() },
+        firmwareVersion = optString("firmware").takeIf { has("firmware") && !isNull("firmware") && it.isNotBlank() },
+        lastConnectedEpochMs = optLong("lastConnected").takeIf { has("lastConnected") && !isNull("lastConnected") && it > 0 },
+        lastBatteryPercent = optNullableInt("lastBattery"),
+        lastLatitudeDeg = optNullableDouble("lastLat"),
+        lastLongitudeDeg = optNullableDouble("lastLon"),
+        healthState = optString("health", "UNKNOWN"),
+        createdAtEpochMs = optLong("created", 0L)
+    ).normalized()
+}
 
 private fun PersistedBatteryProfile.toJson() = JSONObject()
     .put("id", id)

@@ -12,6 +12,7 @@ __pycache__/
 # Proprietary/local research artifacts
 research-local/
 *.apk
+artifacts/
 *.bin
 *.fw
 *.img

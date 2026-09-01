@@ -39,9 +39,11 @@ import io.xstarrevival.app.gs.GsTheme
 import io.xstarrevival.app.gs.PersistedFlightSummary
 import io.xstarrevival.app.gs.PersistedBatteryProfile
 import io.xstarrevival.app.gs.PersistedBatterySample
+import io.xstarrevival.app.gs.PersistedAircraftProfile
 import io.xstarrevival.app.gs.PersistedMediaItem
 import io.xstarrevival.app.gs.MediaOrigin
 import io.xstarrevival.app.gs.MediaTransferState
+import io.xstarrevival.app.gs.readiness
 import io.xstarrevival.core.groundstation.RecoveryPoint
 import io.xstarrevival.core.groundstation.MissionExecutionState
 import io.xstarrevival.core.groundstation.MissionPlan
@@ -156,8 +158,23 @@ private fun GroundStationV2App(
     var batteryHistory by remember { mutableStateOf<List<PersistedBatterySample>>(activeBatteryProfileId?.let(persistence::loadBatteryHistory).orEmpty()) }
     var mediaItems by remember { mutableStateOf<List<PersistedMediaItem>>(mediaStore.load()) }
     var mediaTransfers by remember { mutableStateOf<List<MediaTransferState>>(emptyList()) }
+    val initialAircraftProfiles = remember(persistence) {
+        persistence.loadAircraftProfiles().ifEmpty {
+            val now = System.currentTimeMillis()
+            listOf(PersistedAircraftProfile("aircraft-default", "My X-Star", "X-Star Premium", createdAtEpochMs = now).also(persistence::saveAircraftProfile))
+        }
+    }
+    var aircraftProfiles by remember { mutableStateOf(initialAircraftProfiles) }
+    var activeAircraftProfileId by remember {
+        mutableStateOf(persistence.loadActiveAircraftProfileId()?.takeIf { id -> initialAircraftProfiles.any { it.id == id } } ?: initialAircraftProfiles.first().id)
+    }
     var lastRecoveryWriteMs by remember { mutableLongStateOf(0L) }
     var lastBatteryHistoryWriteMs by remember { mutableLongStateOf(0L) }
+    var lastAircraftProfileWriteMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(activeAircraftProfileId) {
+        persistence.setActiveAircraftProfileId(activeAircraftProfileId)
+    }
 
     LaunchedEffect(
         state.navigation.latitudeDeg,
@@ -172,7 +189,11 @@ private fun GroundStationV2App(
         state.battery.fullCapacityMah,
         state.battery.dischargeCount,
         state.battery.cellDeltaV,
-        state.aircraft.armed
+        state.aircraft.armed,
+        state.aircraft.productName,
+        state.aircraft.firmwareVersion,
+        state.connection,
+        state.warnings
     ) {
         val now = System.currentTimeMillis()
         if (state.navigation.latitudeDeg != null && state.navigation.longitudeDeg != null && now - lastRecoveryWriteMs >= 1_000L) {
@@ -181,6 +202,23 @@ private fun GroundStationV2App(
             recoveryPoints = persistence.loadRecoveryPoints()
         }
         if (sessionTracker.observe(state, now)) flightSummaries = persistence.loadFlightSummaries()
+
+        if (state.connection is io.xstarrevival.core.model.ConnectionState.Connected && now - lastAircraftProfileWriteMs >= 10_000L) {
+            aircraftProfiles.firstOrNull { it.id == activeAircraftProfileId }?.let { profile ->
+                val refreshed = profile.copy(
+                    model = state.aircraft.productName ?: profile.model,
+                    firmwareVersion = state.aircraft.firmwareVersion ?: profile.firmwareVersion,
+                    lastConnectedEpochMs = now,
+                    lastBatteryPercent = state.battery.percent ?: profile.lastBatteryPercent,
+                    lastLatitudeDeg = state.navigation.latitudeDeg ?: profile.lastLatitudeDeg,
+                    lastLongitudeDeg = state.navigation.longitudeDeg ?: profile.lastLongitudeDeg,
+                    healthState = state.readiness().level.name
+                ).normalized()
+                persistence.saveAircraftProfile(refreshed)
+                aircraftProfiles = persistence.loadAircraftProfiles()
+                lastAircraftProfileWriteMs = now
+            }
+        }
 
         val identifiedProfile = state.battery.packId?.let { packId ->
             persistence.ensureIdentifiedBatteryProfile(
@@ -224,7 +262,24 @@ private fun GroundStationV2App(
             when (page) {
                 GsPage.GARAGE -> GsGarageScreen(
                     state, source, availableSources, onSource, onConnect, onDisconnect, onRefresh,
-                    { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS }
+                    { page = GsPage.COCKPIT }, { page = GsPage.AIRCRAFT }, { page = GsPage.MISSIONS }, { page = GsPage.RECORDS },
+                    aircraftProfiles, activeAircraftProfileId,
+                    { profileId ->
+                        activeAircraftProfileId = profileId
+                        persistence.setActiveAircraftProfileId(profileId)
+                    },
+                    { profile ->
+                        persistence.saveAircraftProfile(profile)
+                        aircraftProfiles = persistence.loadAircraftProfiles()
+                        activeAircraftProfileId = profile.id
+                    },
+                    { profileId ->
+                        if (aircraftProfiles.size > 1) {
+                            persistence.deleteAircraftProfile(profileId)
+                            aircraftProfiles = persistence.loadAircraftProfiles()
+                            activeAircraftProfileId = persistence.loadActiveAircraftProfileId() ?: aircraftProfiles.first().id
+                        }
+                    }
                 )
                 GsPage.COCKPIT -> GsCockpitScreen(
                     state, source, heartbeat, commandStatus, simulatorScenario, smartFlightExecution, liveVideoFrames,

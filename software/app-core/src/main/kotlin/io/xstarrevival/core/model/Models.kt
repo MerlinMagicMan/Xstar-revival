@@ -161,7 +161,7 @@ data class WarningState(
     val message: String
 )
 
-enum class Severity { INFO, WARNING, CRITICAL }
+enum class Severity { INFO, ADVISORY, WARNING, CRITICAL }
 
 data class DiagnosticsState(
     val source: String? = null,

@@ -3,11 +3,16 @@ package io.xstarrevival.core.event
 import io.xstarrevival.core.model.XStarState
 import io.xstarrevival.core.model.ProtocolPacketDisposition
 import io.xstarrevival.core.model.ProtocolPacketTrace
+import io.xstarrevival.core.model.Severity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class XStarReducerTest {
+    @Test
+    fun `warning model exposes all four operator severity levels`() {
+        assertEquals(listOf("INFO", "ADVISORY", "WARNING", "CRITICAL"), Severity.entries.map { it.name })
+    }
     @Test
     fun batteryEventBuildsCellsAndDelta() {
         val next = XStarReducer.reduce(
