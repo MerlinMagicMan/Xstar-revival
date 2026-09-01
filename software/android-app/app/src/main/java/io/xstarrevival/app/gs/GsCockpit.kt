@@ -169,7 +169,13 @@ fun GsCockpitScreen(
     val rthActive = smartFlight.mode == SmartFlightMode.RETURN_TO_HOME && smartFlight.phase == SmartFlightPhase.ACTIVE
     val homeAvailable = state.navigation.homeLatitudeDeg != null && state.navigation.homeLongitudeDeg != null
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        GsVideoSurface(state, source, liveVideoFrames, Modifier.fillMaxSize())
+        GsVideoSurface(
+            state,
+            source,
+            liveVideoFrames,
+            userSettings.simulatorVideoUrl,
+            Modifier.fillMaxSize()
+        )
         GsTopTelemetry(state, source, heartbeat, userSettings, Modifier.align(Alignment.TopCenter))
         GsFlightRail(
             onSmart = { dialog = CockpitDialog.SmartFlight },
@@ -337,9 +343,16 @@ fun GsCockpitScreen(
 private enum class CockpitDialog { Health, Rth, Land, SmartFlight, Home, Scenario, Controls, Exposure, Camera, Gimbal }
 
 @Composable
-private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideoFrames: Flow<H264VideoFrame>, modifier: Modifier = Modifier) {
+private fun GsVideoSurface(
+    state: XStarState,
+    source: TelemetrySource,
+    liveVideoFrames: Flow<H264VideoFrame>,
+    simulatorVideoUrl: String,
+    modifier: Modifier = Modifier
+) {
     var liveState by remember { mutableStateOf(LiveVideoUiState()) }
     var replayState by remember { mutableStateOf(VideoReplayUiState()) }
+    var unrealState by remember(simulatorVideoUrl) { mutableStateOf(UnrealVideoUiState()) }
     Box(modifier) {
         when (source) {
             TelemetrySource.OFFICIAL_AUTEL -> H264LiveVideo(
@@ -351,7 +364,17 @@ private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideo
                 modifier = Modifier.fillMaxSize(),
                 onStateChanged = { replayState = it }
             )
-            TelemetrySource.MOCK, TelemetrySource.SIMULATOR -> GsArtificialHorizon(state, Modifier.fillMaxSize())
+            TelemetrySource.SIMULATOR -> {
+                GsArtificialHorizon(state, Modifier.fillMaxSize())
+                if (unrealState.status != UnrealVideoStatus.ERROR) {
+                    UnrealSimulatorVideo(
+                        streamUrl = simulatorVideoUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        onStateChanged = { unrealState = it }
+                    )
+                }
+            }
+            TelemetrySource.MOCK -> GsArtificialHorizon(state, Modifier.fillMaxSize())
         }
         GsCameraMonitoringOverlay(state, Modifier.fillMaxSize())
         val message = when {
@@ -359,8 +382,12 @@ private fun GsVideoSurface(state: XStarState, source: TelemetrySource, liveVideo
             source == TelemetrySource.OFFICIAL_AUTEL && liveState.status != LiveVideoStatus.PLAYING -> "WAITING FOR LIVE H.264"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status == VideoReplayStatus.ERROR -> "REPLAY VIDEO ERROR"
             source == TelemetrySource.MAVLINK_REPLAY && replayState.status != VideoReplayStatus.PLAYING -> "WAITING FOR REPLAY VIDEO"
+            source == TelemetrySource.SIMULATOR && unrealState.status == UnrealVideoStatus.ERROR ->
+                "UNREAL VIDEO UNAVAILABLE — ARTIFICIAL HORIZON ACTIVE"
+            source == TelemetrySource.SIMULATOR && unrealState.status == UnrealVideoStatus.LOADING ->
+                "CONNECTING TO UNREAL VIDEO — CONTROLS REMAIN LOCAL"
             source == TelemetrySource.SIMULATOR && !state.camera.video.receiving -> "VIDEO LINK LOST — TELEMETRY REMAINS"
-            source == TelemetrySource.SIMULATOR -> "SIMULATION — VALIDATED LOCAL COMMANDS"
+            source == TelemetrySource.SIMULATOR -> "UNREAL VIDEO — VALIDATED LOCAL COMMANDS"
             source == TelemetrySource.MOCK -> "MOCK TELEMETRY"
             else -> null
         }

@@ -73,4 +73,25 @@ class GsUserSettingsTest {
         assertEquals(.55f, normalized.controllerSensitivity)
         assertEquals(.08f, normalized.cellDeltaWarningV)
     }
+
+    @Test
+    fun `simulator video only accepts local http endpoints`() {
+        assertEquals(
+            "http://xstar-simulator.local:8080/custom.html",
+            normalizeSimulatorVideoUrl("http://XSTAR-SIMULATOR.local:8080/custom.html")
+        )
+        assertEquals(DEFAULT_SIMULATOR_VIDEO_URL, normalizeSimulatorVideoUrl("https://example.com/player.html"))
+        assertEquals(DEFAULT_SIMULATOR_VIDEO_URL, normalizeSimulatorVideoUrl("http://192.168.1.44:8080/player.html"))
+        assertEquals(DEFAULT_SIMULATOR_VIDEO_URL, normalizeSimulatorVideoUrl("http://8.8.8.8/player.html"))
+        assertEquals(DEFAULT_SIMULATOR_VIDEO_URL, normalizeSimulatorVideoUrl("file:///tmp/player.html"))
+    }
+
+    @Test
+    fun `simulator player URL disables browser controls and auto connects`() {
+        val playerUrl = simulatorPlayerUrl("http://xstar-simulator.local:8080")
+        assertTrue("AutoConnect=true" in playerUrl)
+        assertTrue("AutoPlayVideo=true" in playerUrl)
+        assertTrue("TouchInput=false" in playerUrl)
+        assertTrue("GamepadInput=false" in playerUrl)
+    }
 }

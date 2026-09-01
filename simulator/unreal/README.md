@@ -8,12 +8,12 @@ This Unreal Engine 5.8 project is the high-fidelity visual layer for the isolate
    the active developer directory. UnrealBuildTool currently requires a complete macOS 15.2 SDK;
    Apple's standalone Command Line Tools are not sufficient.
 2. Run `tools/run_simulator_bridge_receiver.py --once` from the repository root to verify Android-to-Mac telemetry before opening Unreal.
-3. Open `simulator/unreal/XStarSimulator.uproject`.
-4. Allow Unreal to compile the `XStarSimulator` C++ module.
-5. Create and save a basic level, set `XStarSimulatorGameMode`, place an `XStarDronePawn`, and press Play.
-6. On Android, choose **Flight Simulator** and connect. The pawn will follow simulated latitude, longitude, altitude, attitude, gimbal, battery, and controller telemetry.
+3. Run `tools/run_unreal_simulator.sh`. The first run installs Epic's matching Pixel Streaming frontend, opens the project in game mode, and serves a local viewer on port `8080`.
+4. On Android, choose **Flight Simulator** and connect. The pawn follows simulated latitude, longitude, altitude, attitude, gimbal, battery, and controller telemetry. The Cockpit view loads Unreal's landscape from `http://josephs-macbook-pro.local:8080/player.html` by default; change the local URL under **Settings → Simulator & Unreal** if the Mac hostname or LAN address differs.
 
 The initial pawn intentionally uses an engine cube so the networking and flight loop can be verified without downloading third-party assets. Replace it with the final X-Star model after the receiver compiles and live telemetry is visible.
+
+Pixel Streaming is configured as video-only in the Android client: the WebView consumes touch, key, mouse, and gamepad events and the player URL disables those browser inputs. The protocol data channel stays available for WebRTC session setup. Controller commands continue through the app's isolated simulator implementation rather than through the video page, and Unreal has no aircraft transmit path.
 
 ## Protocol
 

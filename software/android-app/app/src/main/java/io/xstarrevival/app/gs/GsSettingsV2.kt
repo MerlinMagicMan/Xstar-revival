@@ -27,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -123,7 +124,13 @@ fun GsSettingsV2Screen(
                         onSimulatorControllerConfiguration,
                         onSimulatorControllerCalibration
                     )
-                    GsSettingsFamily.SIMULATOR -> SimulatorSettings(source, simulatorControllerInput, simulatorBridge)
+                    GsSettingsFamily.SIMULATOR -> SimulatorSettings(
+                        source,
+                        simulatorControllerInput,
+                        simulatorBridge,
+                        settings,
+                        update
+                    )
                     GsSettingsFamily.VIDEO -> VideoLinkSettings(
                         settings,
                         update,
@@ -155,8 +162,11 @@ fun GsSettingsV2Screen(
 private fun SimulatorSettings(
     source: TelemetrySource,
     controllerInput: SimulatorControllerInputUiState,
-    bridge: SimulatorBridgeUiState
+    bridge: SimulatorBridgeUiState,
+    settings: GsUserSettings,
+    update: (GsUserSettings) -> Unit
 ) {
+    var videoUrlDraft by remember(settings.simulatorVideoUrl) { mutableStateOf(settings.simulatorVideoUrl) }
     GsSettingLine("Simulation source", if (source == TelemetrySource.SIMULATOR) "ACTIVE" else "Select Flight Simulator in Garage")
     GsSettingLine("Controller-in-loop", controllerInput.deviceName ?: "Waiting for Android HID/gamepad input")
     GsSettingLine("Telemetry bridge", if (bridge.lastError == null) "READY" else "ERROR")
@@ -164,14 +174,26 @@ private fun SimulatorSettings(
     GsSettingLine("Frames sent", bridge.framesSent.toString())
     GsSettingLine("Last sequence", bridge.lastSequence?.toString() ?: "—")
     GsSettingLine("Last error", bridge.lastError ?: "None")
+    OutlinedTextField(
+        value = videoUrlDraft,
+        onValueChange = { videoUrlDraft = it },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        label = { Text("Unreal video URL") },
+        supportingText = { Text("Local HTTP only: use this Mac's .local hostname") }
+    )
+    Button(
+        onClick = { update(settings.copy(simulatorVideoUrl = videoUrlDraft)) },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("SAVE UNREAL VIDEO URL") }
     Text(
-        "Start the desktop receiver with: python3 tools/run_simulator_bridge_receiver.py",
+        "Start Unreal with: tools/run_unreal_simulator.sh",
         color = GsColors.White,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold
     )
     SafetyNote(
-        "Only simulated state is broadcast. The bridge has no receive socket and cannot address USB, the Autel SDK, a radio, or an aircraft."
+        "Unreal video is receive-only in this app. Flight controls stay on the isolated simulator bridge and cannot address USB, the Autel SDK, a radio, or an aircraft."
     )
 }
 
