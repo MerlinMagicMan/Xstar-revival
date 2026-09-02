@@ -475,7 +475,9 @@ class XStarViewModel(application: Application) : AndroidViewModel(application) {
     fun stopBenchCapture() = benchCaptureManager.stop()
 
     fun startControllerProbe() {
-        if (mutableSource.value == TelemetrySource.OFFICIAL_AUTEL && controllerUsb.value.controllerDetected) {
+        if (mutableSource.value in setOf(TelemetrySource.SIMULATOR, TelemetrySource.OFFICIAL_AUTEL) &&
+            controllerUsb.value.controllerDetected
+        ) {
             controllerUsbInputProbe.start()
         }
     }

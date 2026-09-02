@@ -290,6 +290,16 @@ private fun ControllerInputProbeControls(
                     style = MaterialTheme.typography.labelSmall
                 )
             }
+            if (probe.buttonFramesRead > 0) {
+                val button = probe.lastButtonName
+                    ?: probe.lastButtonEventId?.let { "EVENT $it" }
+                    ?: "UNKNOWN"
+                Text(
+                    "Simulator button frames · ${probe.buttonFramesRead} · " +
+                        "$button · raw state ${probe.lastButtonStateValue ?: "—"}",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
             if (probe.active) {
                 Button(onClick = onStop) { Text("Stop listening") }
             } else {
@@ -298,7 +308,7 @@ private fun ControllerInputProbeControls(
                 }
             }
             Text(
-                "Passive check only · sends 0 bytes · limited to 20 seconds or 1 MB",
+                "Passive stick/button check · sends 0 bytes · limited to 20 seconds or 1 MB",
                 style = MaterialTheme.typography.labelSmall
             )
         }

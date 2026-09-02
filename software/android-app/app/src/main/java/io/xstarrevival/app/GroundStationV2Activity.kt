@@ -78,11 +78,15 @@ class GroundStationV2Activity : ComponentActivity() {
                 val missionExecution by vm.missionExecution.collectAsStateWithLifecycle()
                 val smartFlightExecution by vm.smartFlightExecution.collectAsStateWithLifecycle()
                 val simulatorControllerInput by vm.simulatorControllerInput.collectAsStateWithLifecycle()
+                val controllerUsb by vm.controllerUsb.collectAsStateWithLifecycle()
+                val controllerProbe by vm.controllerProbe.collectAsStateWithLifecycle()
                 val simulatorBridge by vm.simulatorBridge.collectAsStateWithLifecycle()
                 val simulatorViewMode by vm.simulatorViewMode.collectAsStateWithLifecycle()
                 GroundStationV2App(
                     state, source, heartbeat, commandStatus, commandHistory, simulatorScenario, missionExecution, smartFlightExecution,
                     simulatorControllerInput,
+                    controllerUsb,
+                    controllerProbe,
                     simulatorBridge,
                     simulatorViewMode,
                     vm.availableSources, vm.liveVideoFrames,
@@ -94,6 +98,7 @@ class GroundStationV2Activity : ComponentActivity() {
                     vm::calibrateSimulatorGimbal, vm::configureSimulatorGimbal,
                     vm::setSimulatorVideoLinkChannel,
                     vm::configureSimulatorController, vm::calibrateSimulatorController,
+                    vm::startControllerProbe, vm::stopControllerProbe,
                     vm::setSimulatorScenario, vm::setSimulatorControls,
                     vm::toggleSimulatorViewMode,
                     vm::startSimulatorMission, vm::pauseSimulatorMission,
@@ -134,6 +139,8 @@ private fun GroundStationV2App(
     missionExecution: MissionExecutionState,
     smartFlightExecution: SmartFlightExecutionState,
     simulatorControllerInput: SimulatorControllerInputUiState,
+    controllerUsb: ControllerUsbUiState,
+    controllerProbe: ControllerProbeUiState,
     simulatorBridge: SimulatorBridgeUiState,
     simulatorViewMode: SimulatorViewMode,
     availableSources: List<TelemetrySource>,
@@ -157,6 +164,8 @@ private fun GroundStationV2App(
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorControllerCalibration: () -> Unit,
+    onStartControllerProbe: () -> Unit,
+    onStopControllerProbe: () -> Unit,
     onSimulatorScenario: (SimulatorScenario) -> Unit,
     onSimulatorControls: (SimulatorControlInput) -> Unit,
     onToggleSimulatorViewMode: () -> Unit,
@@ -408,10 +417,14 @@ private fun GroundStationV2App(
                     state,
                     source,
                     simulatorControllerInput,
+                    controllerUsb,
+                    controllerProbe,
                     simulatorBridge,
                     onSimulatorVideoLinkChannel,
                     onSimulatorControllerConfiguration,
                     onSimulatorControllerCalibration,
+                    onStartControllerProbe,
+                    onStopControllerProbe,
                     onSimulatorGimbalRecenter,
                     onSimulatorGimbalCalibration,
                     onSimulatorGimbalConfiguration,
