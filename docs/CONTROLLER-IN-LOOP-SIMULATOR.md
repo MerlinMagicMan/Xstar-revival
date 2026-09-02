@@ -57,6 +57,16 @@ The factory controller presents an Android Open Accessory identity rather than a
 
 No controller PCB trace should be cut and no firmware should be flashed until the HID and passive SDK routes are disproven. Existing live evidence shows that the native USB keepalive works but controller-upload callbacks produced no data with the aircraft powered off, which suggests the stick stream may depend on the aircraft-side relay.
 
+The 2026-09-02 office retest closed the remaining software-only gaps. Android successfully matched
+and granted permission for the controller's exact `ammlab.org / HelloADK / 1.0` accessory identity.
+Two new bounded receive-only captures remained exactly zero bytes while the left stick moved through
+full travel. The only older non-empty raw capture contained seven identical native keepalive replies
+and no additional payload. The controller's reserved Micro-USB CDC service port also emitted no
+startup or stick data. With no aircraft available, the standard accessory path, official SDK upload
+path, and reserved service port therefore expose no usable control stream. Route 3 is now the
+recommended aircraft-off controller-in-the-loop path; its electrical attachment must remain
+removable and isolated from the controller radio/flight-command path.
+
 ## Coverage and remaining boundary
 
 The simulator can verify the app UI, physical control ergonomics, axis curves, button assignments, command lifecycle, flight dynamics, missions, smart-flight modes, camera/gimbal behavior, warnings, failure injection, logging, replay, and Unreal visualization.
