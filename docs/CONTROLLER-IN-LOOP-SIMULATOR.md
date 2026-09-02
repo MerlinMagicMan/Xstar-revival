@@ -71,11 +71,15 @@ Static decoding of the final V1.0.1.5 controller application has now opened a
 preferable intermediate route. The stock firmware already samples four axes,
 maps the selector/photo/record/knob/settings controls, and builds control
 messages through one common dispatcher. It also preserves a simulated-flight
-UI. The next experiment is therefore a receive-only trace of the registered
-handlers for selectors `0x81` and `0x210`. If that message path can be
-exposed through the controller's existing ports, no controller modification or
-external stick adapter is needed. See `REMOTE-CONTROLLER-FIRMWARE.md` for the
-reproducible address map and the limits of this finding.
+UI. The discrete-control stream is now traced through framed messages to the
+MCU's internal USART1 path. The stick stream is traced through an `0xAA` frame,
+a bounded buffer and 8-byte frames to the MCU's bxCAN1 peripheral. The next
+experiment is a receive-only trace at the USART1 and CAN1 board connections,
+after confirming their voltage levels and adding appropriate isolation. If
+either path can be exposed safely through an existing board connection, no
+controller firmware modification or external stick adapter is needed. See
+`REMOTE-CONTROLLER-FIRMWARE.md` for the reproducible address map and the limits
+of this finding.
 
 ## Coverage and remaining boundary
 

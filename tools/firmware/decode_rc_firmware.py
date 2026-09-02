@@ -22,7 +22,7 @@ from analyze_rc_firmware import BLOCK_SIZE, RcImage, load_image
 AES_128_KEY = "2b7e151628aed2a6abf7158809cf4f3c"
 FLASH_START = 0x08000000
 FLASH_END = 0x08200000
-APPLICATION_BASE = 0x08020000
+APPLICATION_BASE = 0x08013000
 SRAM_START = 0x20000000
 SRAM_END = 0x20080000
 
@@ -69,7 +69,9 @@ def decrypt_payload(image: RcImage, openssl: str) -> tuple[bytes, bytes]:
     return decoded, padding
 
 
-def validate_stm32_image(decoded: bytes) -> tuple[int, int, int, int]:
+def validate_stm32_image(
+    decoded: bytes, application_base: int = APPLICATION_BASE
+) -> tuple[int, int, int, int]:
     if len(decoded) < 8:
         raise ValueError("decoded image is too short for an STM32 vector table")
 
@@ -81,6 +83,17 @@ def validate_stm32_image(decoded: bytes) -> tuple[int, int, int, int]:
         raise ValueError(f"reset vector 0x{reset_vector:08X} is not a Thumb address")
     if not FLASH_START <= reset_address < FLASH_END:
         raise ValueError(f"reset vector 0x{reset_vector:08X} is outside STM32 flash")
+    reset_offset = reset_address - application_base
+    if not 0 <= reset_offset < len(decoded):
+        raise ValueError(
+            f"reset vector 0x{reset_vector:08X} does not map into the packaged "
+            f"application at 0x{application_base:08X}"
+        )
+    reset_probe = decoded[reset_offset : reset_offset + 8]
+    if not reset_probe or all(value in (0x00, 0xFF) for value in reset_probe):
+        raise ValueError(
+            f"reset handler at file offset 0x{reset_offset:X} contains no plausible code"
+        )
 
     valid_vectors = 0
     application_vectors = 0
@@ -91,7 +104,7 @@ def validate_stm32_image(decoded: bytes) -> tuple[int, int, int, int]:
         address = vector & ~1
         if vector & 1 and FLASH_START <= address < FLASH_END:
             valid_vectors += 1
-            if APPLICATION_BASE <= address < APPLICATION_BASE + len(decoded):
+            if application_base <= address < application_base + len(decoded):
                 application_vectors += 1
     if valid_vectors < 8:
         raise ValueError(
@@ -161,6 +174,7 @@ def main() -> int:
     print(f"application_base=0x{APPLICATION_BASE:08X}")
     print(f"initial_stack_pointer=0x{initial_sp:08X}")
     print(f"reset_vector=0x{reset_vector:08X}")
+    print(f"reset_file_offset=0x{(reset_vector & ~1) - APPLICATION_BASE:X}")
     print(f"plausible_interrupt_vectors={valid_vectors}")
     print(f"application_interrupt_vectors={application_vectors}")
     print(f"decoded_sha256={sha256(decoded)}")
