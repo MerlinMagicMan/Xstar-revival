@@ -81,6 +81,13 @@ controller firmware modification or external stick adapter is needed. See
 `REMOTE-CONTROLLER-FIRMWARE.md` for the reproducible address map, the matching
 FCC internal-board photographs and the limits of this finding.
 
+Static pin initialization narrows the passive targets further. The discrete
+control stream uses USART1 at 115,200 baud on PA9/TX and PA10/RX; a receive-only
+capture needs PA9 and ground only. The stick stream uses remapped CAN1 on
+PB8/RX and PB9/TX at 1 Mbit/s. Capture that stream from CAN-H/CAN-L after its
+transceiver, using an isolated adapter in listen-only mode. MCU logic pins must
+not be connected directly to a USB CAN adapter.
+
 ## Coverage and remaining boundary
 
 The simulator can verify the app UI, physical control ergonomics, axis curves, button assignments, command lifecycle, flight dynamics, missions, smart-flight modes, camera/gimbal behavior, warnings, failure injection, logging, replay, and Unreal visualization.
