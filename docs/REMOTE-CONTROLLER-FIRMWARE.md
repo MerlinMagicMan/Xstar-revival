@@ -75,6 +75,13 @@ the common CRC-32 and Adler-32 variants tested so far. They are not required to
 validate the offline plaintext, but remain a blocker for any attempt to rebuild
 a flashable package.
 
+The aggregate manifest's component check is understood separately. Its `crc32`
+value is JAMCRC (the bitwise complement of the conventional CRC-32 result) over
+the complete RC component, including the wrapper and encrypted payload. This
+reproduces `0xC340559D` for V1.0.0.37 and `0x1B6C66B4` for V1.0.1.5. The wrapper's
+own check word at offset `0x24` is still unknown and is the remaining packaging
+integrity blocker.
+
 ## Reproducing the result
 
 After extracting both aggregate packages into private directories, inspect the
@@ -105,6 +112,38 @@ The analyzer, decoder and landmark mapper operate only on local files. The
 decoder refuses to overwrite an output and writes it only after the plaintext
 passes padding and STM32 vector-table checks. None of these tools opens a USB
 device, sends a controller command or performs a firmware update.
+
+## Offline simulator-only patch experiment
+
+`tools/firmware/patch_rc_simulator_firmware.py` builds a tightly bounded
+research variant from the exact decoded V1.0.1.5 image. It replaces only the
+52-byte selector `0x210` callback. The replacement:
+
+1. rejects a control payload longer than 124 bytes;
+2. uses the stock `0x08028058` routine to create the existing `0xAA`, channel 3
+   stick frame in the stock 128-byte buffer;
+3. passes that complete frame to the stock `0x080280E0` `0xA5`/USART1 sender;
+4. does not set the CAN queue length, so this simulator variant does not send
+   stick frames toward the aircraft CAN path; and
+5. leaves the existing selector `0x81` button callback unchanged.
+
+The tool requires both the exact decoded-image SHA-256 and the exact original
+callback bytes before it will write a new file. It refuses to overwrite an
+output, revalidates the STM32 vector table after patching, and verifies that no
+bytes outside the callback changed.
+
+```bash
+python tools/firmware/patch_rc_simulator_firmware.py \
+  X3P_RC_V1.0.1.5.decoded.bin \
+  -o X3P_RC_V1.0.1.5.simulator-only.decoded.bin
+```
+
+This output is deliberately **not flashable**. It is decoded application data,
+not a rebuilt RC-PRO package, and the inner wrapper check algorithm and a tested
+controller recovery path are not yet available. Even after packaging is solved,
+the separate USB/video processor still has to be tested to determine whether it
+forwards this new USART1 payload to the Android accessory connection. Static
+analysis makes that route plausible; it does not prove it.
 
 ## Physical-control path in V1.0.1.5
 
@@ -192,26 +231,26 @@ does not by itself prove that the Micro-USB port can stream controls.
 ## Simulator relevance
 
 The V1.0.1.5 image is the correct target for controller interoperability
-research. The decoded control path changes the next priorities to:
+research. The software-only route now changes the priorities to:
 
-1. identify the controller board connections and electrical levels for the
-   selector `0x81` USART1 stream and selector `0x210` CAN1 stream;
-2. capture that path passively while moving one control at a time;
-3. map all axis ranges, centers, direction and event debounce behavior;
-4. translate the observed frames into the simulator's standard gamepad input;
-5. retain the external isolated adapter as the fallback if the existing frame
-   path cannot be exposed without an aircraft.
+1. verify the offline callback replacement byte-for-byte and keep it isolated
+   from all updater and device code;
+2. identify the wrapper check algorithm and document a full backup/recovery
+   procedure before any controller write;
+3. test whether the controller's separate USB/video processor forwards the
+   rerouted USART1 stick frames to Android;
+4. capture one control at a time and map all axis ranges, centers, directions
+   and event debounce behavior; and
+5. translate the observed frames into the simulator input model while retaining
+   the external isolated adapter as a fallback.
 
-Firmware modification is not the first experiment. A decoded and validated
-image, bootloader/recovery characterization, full backup path and a reversible
-bench procedure remain prerequisites before any write to the physical
-controller.
+The offline modification is safe to construct and inspect, but bootloader and
+recovery characterization, a full backup path and a reversible bench procedure
+remain prerequisites before any write to the physical controller.
 
-## Next evidence target
+## Optional hardware evidence route
 
-Use the FCC main-board view to locate the processor assembly, then identify the
-selector `0x81` USART1 and selector `0x210` CAN1 connections on the matching
-physical board. A receive-only capture that correlates those messages with
-one-at-a-time stick and button movement is the evidence needed before the
-simulator adapter can be considered complete. Determine voltage levels and add
-appropriate isolation before attaching any capture hardware.
+The FCC main-board view remains useful if a later passive hardware trace is
+chosen, but opening the controller is not required for the current software-only
+work. The board photographs are treated as the matching hardware reference; no
+unverified trace or pad function is inferred from them.
