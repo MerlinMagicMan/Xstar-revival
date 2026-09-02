@@ -149,6 +149,25 @@ USART1 here is an internal MCU hardware path; this finding does not identify it
 as the Mac-visible Micro-USB port. The live Micro-USB CDC tests remain valid:
 that exposed service port produced no controller stream with the aircraft off.
 
+## Controller-board evidence
+
+The controller's FCC filing is [2AGNTRC5809A, model
+RC5809A](https://fccid.io/2AGNTRC5809A). Its public [internal-photo
+exhibit](https://fccid.io/2AGNTRC5809A/Internal-Photos/Int-Photos-2883859.pdf)
+shows the main processing assembly with its lower shield removed. The board
+legend visible in the exhibit is `EF3S_MAIN_HD_V7`. Three exposed round gold
+pads are visible along the left edge of that assembly, and multiple removable
+board connectors are present.
+
+Those photographs are a location guide, not a pinout. Their resolution does
+not establish which nets reach the three pads, whether a CAN transceiver sits
+between the MCU and a connector, or the voltage levels on any candidate point.
+The FCC page lists schematics and a block diagram as metadata only, so neither
+is available to resolve the nets. Before a passive capture, confirm that the
+physical controller carries FCC ID `2AGNTRC5809A` and the same board revision,
+then document both board faces sharply and identify ground and signal levels
+without injecting power or commands.
+
 The image also contains calibration handlers and strings for `CANMODE`,
 `RFMODE`, `DEBUGROCKER`, `DEBUGKEY`, `PhoneSet:CanMode`, `SIMULATED FLIGHT`,
 `Use the command sticks`, `Command sticks error` and `App-controlled stick
@@ -177,8 +196,9 @@ controller.
 
 ## Next evidence target
 
-Locate the selector `0x81` USART1 and selector `0x210` CAN1 board connections.
-A receive-only capture that correlates those messages with one-at-a-time stick
-and button movement is the evidence needed before the simulator adapter can be
-considered complete. Determine voltage levels and add appropriate isolation
-before attaching any capture hardware.
+Use the FCC main-board view to locate the processor assembly, then identify the
+selector `0x81` USART1 and selector `0x210` CAN1 connections on the matching
+physical board. A receive-only capture that correlates those messages with
+one-at-a-time stick and button movement is the evidence needed before the
+simulator adapter can be considered complete. Determine voltage levels and add
+appropriate isolation before attaching any capture hardware.

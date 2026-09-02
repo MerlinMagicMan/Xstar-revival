@@ -78,8 +78,8 @@ experiment is a receive-only trace at the USART1 and CAN1 board connections,
 after confirming their voltage levels and adding appropriate isolation. If
 either path can be exposed safely through an existing board connection, no
 controller firmware modification or external stick adapter is needed. See
-`REMOTE-CONTROLLER-FIRMWARE.md` for the reproducible address map and the limits
-of this finding.
+`REMOTE-CONTROLLER-FIRMWARE.md` for the reproducible address map, the matching
+FCC internal-board photographs and the limits of this finding.
 
 ## Coverage and remaining boundary
 
