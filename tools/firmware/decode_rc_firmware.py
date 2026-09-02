@@ -25,10 +25,34 @@ FLASH_END = 0x08200000
 APPLICATION_BASE = 0x08013000
 SRAM_START = 0x20000000
 SRAM_END = 0x20080000
+STM32_CRC32_POLYNOMIAL = 0x04C11DB7
 
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def stm32_word_crc32(data: bytes) -> int:
+    """Return the wrapper CRC used by the X-Star STM32 component loader.
+
+    The loader initializes the CRC to zero, pads the decoded payload to a
+    32-bit boundary with erased-flash bytes, and feeds little-endian words to
+    the non-reflected STM32 CRC-32 peripheral.
+    """
+
+    remainder = len(data) % 4
+    if remainder:
+        data += b"\xFF" * (4 - remainder)
+
+    crc = 0
+    for offset in range(0, len(data), 4):
+        crc ^= struct.unpack_from("<I", data, offset)[0]
+        for _ in range(32):
+            if crc & 0x80000000:
+                crc = ((crc << 1) ^ STM32_CRC32_POLYNOMIAL) & 0xFFFFFFFF
+            else:
+                crc = (crc << 1) & 0xFFFFFFFF
+    return crc
 
 
 def decrypt_payload(image: RcImage, openssl: str) -> tuple[bytes, bytes]:
@@ -66,6 +90,12 @@ def decrypt_payload(image: RcImage, openssl: str) -> tuple[bytes, bytes]:
     padding = padded[declared_length:]
     if any(value != 0xFF for value in padding):
         raise ValueError("decoded trailing bytes are not the expected 0xFF flash padding")
+    calculated_check = stm32_word_crc32(decoded)
+    if calculated_check != image.check_word:
+        raise ValueError(
+            "decoded wrapper CRC mismatch: "
+            f"0x{calculated_check:08X} != 0x{image.check_word:08X}"
+        )
     return decoded, padding
 
 
@@ -171,6 +201,8 @@ def main() -> int:
     print(f"decoded_length={len(decoded)}")
     print(f"padding_length={len(padding)}")
     print("padding_byte=0xFF")
+    print(f"wrapper_crc32=0x{stm32_word_crc32(decoded):08X}")
+    print("wrapper_crc32_verification=MATCH")
     print(f"application_base=0x{APPLICATION_BASE:08X}")
     print(f"initial_stack_pointer=0x{initial_sp:08X}")
     print(f"reset_vector=0x{reset_vector:08X}")

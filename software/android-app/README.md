@@ -134,6 +134,13 @@ bounded native-proxy experiment confirmed two-way controller USB keepalives, but
 aircraft-side routes all timed out while the aircraft was unpowered; no controller framing is
 inferred from that result.
 
+The passive input lab also contains a bounded incremental decoder for the simulator-only RC
+firmware experiment. It recognizes only checksum-valid nested `0xA5`/`0xAA` channel-3 frames and
+reports the first four big-endian axes without assigning them to physical sticks. Static firmware
+analysis proves a center value of `0x400` and a calibrated span of `0x299`; the physical axis order
+remains intentionally unassigned until a one-control-at-a-time live capture proves it. The decoder
+does not send USB data or route controls to a live aircraft.
+
 The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17` and contains both `arm64-v8a` and `armeabi-v7a` native libraries. When the file is absent, the `Live X-Star` source and all proprietary classes are omitted from the build.
 
 ## Adapter plan
