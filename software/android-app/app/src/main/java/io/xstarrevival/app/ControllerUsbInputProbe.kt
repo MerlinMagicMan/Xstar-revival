@@ -82,10 +82,11 @@ internal object ControllerProbeBounds {
 }
 
 /**
- * Bounded receive-only probe for the controller's Android Open Accessory stream.
+ * Bounded controller-input probe for the Android Open Accessory and direct CDC streams.
  *
- * This class deliberately constructs only a [FileInputStream] for the USB descriptor. It contains
- * no USB output stream and no accessory write operation. The file output stores received bytes in
+ * Accessory mode is receive-only. Direct CDC mode performs the standard volatile session setup in
+ * [ControllerCdcSessionInitializer], then reads only the data interface's bulk-IN endpoint. Neither
+ * mode has a data-OUT path or a firmware/update operation. The file output stores received bytes in
  * the app's private cache so confirmed controls can later become deterministic replay fixtures.
  */
 internal class ControllerUsbInputProbe(
@@ -185,9 +186,24 @@ internal class ControllerUsbInputProbe(
             fail("Android could not open the controller USB device")
             return
         }
-        if (!connection.claimInterface(receiveTarget.usbInterface, true)) {
+        if (!connection.claimInterface(receiveTarget.controlInterface, true)) {
+            connection.close()
+            fail("Android could not claim the controller CDC control interface")
+            return
+        }
+        if (!connection.claimInterface(receiveTarget.dataInterface, true)) {
+            runCatching { connection.releaseInterface(receiveTarget.controlInterface) }
             connection.close()
             fail("Android could not claim the controller receive interface")
+            return
+        }
+        val initializationError = ControllerCdcSessionInitializer.initialize(
+            connection,
+            receiveTarget.controlInterface
+        )
+        if (initializationError != null) {
+            closeDeviceConnection(connection, receiveTarget)
+            fail(initializationError)
             return
         }
 
@@ -206,7 +222,7 @@ internal class ControllerUsbInputProbe(
                     if (count < 0 && requestedStop.get() == null) 0 else count
                 }
             } finally {
-                closeDeviceConnection(connection, receiveTarget.usbInterface)
+                closeDeviceConnection(connection, receiveTarget)
             }
         }
         startTimeout()
@@ -380,28 +396,45 @@ internal class ControllerUsbInputProbe(
         }
     }
 
-    private fun closeDeviceConnection(connection: UsbDeviceConnection, usbInterface: UsbInterface) {
+    private fun closeDeviceConnection(
+        connection: UsbDeviceConnection,
+        receiveTarget: DirectUsbReceiveTarget
+    ) {
         synchronized(descriptorLock) {
-            runCatching { connection.releaseInterface(usbInterface) }
+            runCatching { connection.releaseInterface(receiveTarget.dataInterface) }
+            runCatching { connection.releaseInterface(receiveTarget.controlInterface) }
             runCatching { connection.close() }
             if (deviceConnection === connection) deviceConnection = null
         }
     }
 
     private fun findReceiveTarget(device: UsbDevice): DirectUsbReceiveTarget? {
+        var controlInterface: UsbInterface? = null
+        var dataInterface: UsbInterface? = null
+        var receiveEndpoint: UsbEndpoint? = null
         for (interfaceIndex in 0 until device.interfaceCount) {
             val candidate = device.getInterface(interfaceIndex)
+            if (candidate.interfaceClass == UsbConstants.USB_CLASS_COMM &&
+                candidate.interfaceSubclass == CDC_ACM_SUBCLASS
+            ) {
+                controlInterface = candidate
+            }
             if (candidate.interfaceClass != UsbConstants.USB_CLASS_CDC_DATA) continue
             for (endpointIndex in 0 until candidate.endpointCount) {
                 val endpoint = candidate.getEndpoint(endpointIndex)
                 if (endpoint.direction == UsbConstants.USB_DIR_IN &&
                     endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK
                 ) {
-                    return DirectUsbReceiveTarget(candidate, endpoint)
+                    dataInterface = candidate
+                    receiveEndpoint = endpoint
                 }
             }
         }
-        return null
+        return if (controlInterface != null && dataInterface != null && receiveEndpoint != null) {
+            DirectUsbReceiveTarget(controlInterface, dataInterface, receiveEndpoint)
+        } else {
+            null
+        }
     }
 
     private fun pruneOldCaptures() {
@@ -431,10 +464,12 @@ internal class ControllerUsbInputProbe(
         const val HEX_PREVIEW_BYTES = 24
         const val UI_UPDATE_INTERVAL_MS = 100L
         const val DIRECT_USB_READ_TIMEOUT_MS = 250
+        const val CDC_ACM_SUBCLASS = 0x02
     }
 }
 
 private data class DirectUsbReceiveTarget(
-    val usbInterface: UsbInterface,
+    val controlInterface: UsbInterface,
+    val dataInterface: UsbInterface,
     val endpoint: UsbEndpoint
 )

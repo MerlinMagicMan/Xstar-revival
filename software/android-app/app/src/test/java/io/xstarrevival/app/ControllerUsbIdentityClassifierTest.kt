@@ -13,6 +13,7 @@ class ControllerUsbIdentityClassifierTest {
         )
 
         assertEquals(ControllerUsbStatus.XSTAR, state.status)
+        assertEquals(ControllerUsbTransport.ACCESSORY, state.transport)
         assertTrue(state.controllerDetected)
     }
 
@@ -23,6 +24,7 @@ class ControllerUsbIdentityClassifierTest {
         val state = ControllerUsbIdentityClassifier.classify(listOf(identity))
 
         assertEquals(ControllerUsbStatus.XSTAR_LEGACY, state.status)
+        assertEquals(ControllerUsbTransport.ACCESSORY, state.transport)
         assertEquals(identity, state.identity)
         assertTrue(state.controllerDetected)
     }
@@ -47,6 +49,7 @@ class ControllerUsbIdentityClassifierTest {
         )
 
         assertEquals(ControllerUsbStatus.XSTAR, state.status)
+        assertEquals(ControllerUsbTransport.ACCESSORY, state.transport)
     }
 
     @Test
@@ -73,6 +76,7 @@ class ControllerUsbIdentityClassifierTest {
         )
 
         assertEquals(ControllerUsbStatus.XSTAR, state.status)
+        assertEquals(ControllerUsbTransport.DIRECT_CDC, state.transport)
         assertEquals(directRemote, state.identity)
         assertTrue(state.controllerDetected)
     }

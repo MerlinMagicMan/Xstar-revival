@@ -11,6 +11,10 @@ USB_PROBE = (
     Path(__file__).parents[2]
     / "android-app/app/src/main/java/io/xstarrevival/app/ControllerUsbInputProbe.kt"
 )
+CDC_SESSION = (
+    Path(__file__).parents[2]
+    / "android-app/app/src/main/java/io/xstarrevival/app/ControllerCdcSessionInitializer.kt"
+)
 SIMULATOR_PLATFORM = (
     Path(__file__).parents[2]
     / "app-core/src/main/kotlin/io/xstarrevival/core/sim/SimulatorXStarPlatform.kt"
@@ -123,6 +127,43 @@ if USB_PROBE.is_file():
             file=sys.stderr,
         )
         raise SystemExit(1)
+
+if CDC_SESSION.is_file():
+    cdc_source = CDC_SESSION.read_text(encoding="utf-8")
+    forbidden_cdc_operations = (
+        "USB_TYPE_VENDOR",
+        "bulkTransfer",
+        "FileOutputStream",
+        "OutputStream",
+        "sendCommand",
+        "writeUsbData",
+    )
+    cdc_references = [name for name in forbidden_cdc_operations if name in cdc_source]
+    if re.search(r"\.write\s*\(", cdc_source):
+        cdc_references.append(".write(")
+    if cdc_references:
+        print(
+            "CDC initializer references a forbidden output operation: "
+            + ", ".join(cdc_references),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    required_cdc_guards = (
+        "SET_LINE_CODING_REQUEST = 0x20",
+        "SET_CONTROL_LINE_STATE_REQUEST = 0x22",
+        "DTR_RTS_ENABLED = 0x03",
+        "USB_TYPE_CLASS",
+        "USB_RECIPIENT_INTERFACE",
+        "BAUD_RATE = 115_200",
+    )
+    missing_cdc_guards = [name for name in required_cdc_guards if name not in cdc_source]
+    if missing_cdc_guards or cdc_source.count("connection.controlTransfer(") != 2:
+        print(
+            "CDC initializer is outside the two-request session allowlist: "
+            + ", ".join(missing_cdc_guards),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     if "bulkTransfer" in usb_source and "UsbConstants.USB_DIR_IN" not in usb_source:
         print(
             "Receive-only USB bulk transfer is not guarded by an IN endpoint check",
@@ -153,5 +194,6 @@ if SIMULATOR_PLATFORM.is_file():
 
 print(
     f"Read-only Autel audit passed ({len(FORBIDDEN_CALLS)} control/write calls excluded; "
-    "USB probe has no output path; simulator has no hardware bridge)."
+    "USB data probe has no OUT path; direct CDC is limited to two standard volatile "
+    "session requests; simulator has no hardware bridge)."
 )

@@ -308,7 +308,11 @@ private fun ControllerInputProbeControls(
                 }
             }
             Text(
-                "Passive stick/button check · sends 0 bytes · limited to 20 seconds or 1 MB",
+                if (controllerUsb.transport == ControllerUsbTransport.DIRECT_CDC) {
+                    "Direct USB check · temporary CDC setup only · IN data only · no firmware write · limited to 20 seconds or 1 MB"
+                } else {
+                    "Accessory stick/button check · sends 0 bytes · limited to 20 seconds or 1 MB"
+                },
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -417,7 +421,11 @@ private fun ControllerUsbStatusText(state: ControllerUsbUiState) {
     val identity = state.identity
     val text = when (state.status) {
         ControllerUsbStatus.DISCONNECTED -> "Controller USB not detected"
-        ControllerUsbStatus.XSTAR -> "Controller USB connected · ${identity?.model ?: "Autel accessory"}"
+        ControllerUsbStatus.XSTAR -> if (state.transport == ControllerUsbTransport.DIRECT_CDC) {
+            "Controller direct USB connected · ${identity?.model ?: "Autel controller"}"
+        } else {
+            "Controller USB connected · ${identity?.model ?: "Autel accessory"}"
+        }
         ControllerUsbStatus.XSTAR_LEGACY -> "Controller USB connected · legacy X-Star accessory (${identity?.model})"
         ControllerUsbStatus.OTHER_ACCESSORY ->
             "USB accessory present but not recognized · ${identity?.manufacturer} / ${identity?.model}"

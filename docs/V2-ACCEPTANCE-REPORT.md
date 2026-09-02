@@ -45,7 +45,7 @@ The live Autel adapter remains intentionally receive-only. Real motor, flight, m
 - Kotlin/JVM tests: **145 passed**, 0 failed, 0 skipped.
 - Python protocol tests: **12 passed**.
 - Android lint: successful. Remaining notices are dependency-update suggestions, the deliberate landscape-first activity policy, and the min-SDK-qualified adaptive icon directory.
-- Receive-only Autel audit: successful; **76** discovered control/write calls remain excluded, the USB probe has no output path, and simulator commands cannot reach hardware.
+- Receive-only Autel audit: successful; **76** discovered Autel control/write calls remain excluded, the USB probe has no data-OUT path, direct CDC setup is limited to two allow-listed volatile class requests, and simulator commands cannot reach hardware.
 - Debug APK assembly with the validated Autel AAR: successful.
 - APK signature: APK Signature Scheme v2 verified, one signer.
 - Validated Autel AAR SHA-256: `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17`.

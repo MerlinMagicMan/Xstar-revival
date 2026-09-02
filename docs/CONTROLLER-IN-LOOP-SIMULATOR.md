@@ -69,9 +69,12 @@ and no additional payload. The controller's Micro-USB CDC interface was then ide
 vendor/product `0x6175:0x5243` (`Autel / Remote Control / 2.00`). The app was extended to request Android
 permission, claim only its CDC-data interface, and read only its bulk-IN endpoint. A live capture with
 the sticks moving again remained exactly zero bytes; the reader issued no USB control transfer and had
-no OUT endpoint path. With no aircraft available, the standard accessory path, official SDK upload
+no OUT endpoint path. A final direct-port retest added only the two standard, volatile CDC-ACM setup
+requests: 115,200/8-N-1 line coding and DTR/RTS assertion. Android accepted both requests, but a
+20-second capture with the controls moving still produced exactly zero bytes. The app has no data-OUT
+path, vendor request, firmware command, or persistent-storage write. With no aircraft available, the standard accessory path, official SDK upload
 path, and reserved service port therefore expose no usable control stream. Route 3 remains the
-proven aircraft-off fallback; its electrical attachment must remain
+supported aircraft-off fallback; its electrical attachment must remain
 removable and isolated from the controller radio/flight-command path.
 
 Static decoding of the final V1.0.1.5 controller application has now opened a
@@ -93,8 +96,13 @@ PB8/RX and PB9/TX at 1 Mbit/s. Capture that stream from CAN-H/CAN-L after its
 transceiver, using an isolated adapter in listen-only mode. MCU logic pins must
 not be connected directly to a USB CAN adapter.
 
-The selected next route is software-only and does not require opening the
-controller. A hash-locked offline patcher now replaces only the stock stick
+The selected next live route is a removable, passive adapter on one spare controller: isolated,
+listen-only CAN capture for the stock stick frames plus receive-only USART1 capture for the stock
+button frames, presented to Android as a normal gamepad. The first adapter stage is a logger only;
+gamepad output is enabled only after aircraft-off traffic and electrical levels are measured. The
+working controller remains unopened and unmodified.
+
+A separate software-only route remains research-only. A hash-locked offline patcher replaces only the stock stick
 callback: it builds the same bounded `0xAA` frame, sends that frame through the
 existing USART1 framed-data routine, and deliberately leaves the aircraft CAN
 stick queue inactive. The controller's normal button callback is unchanged.
@@ -125,7 +133,7 @@ live press/release semantics remain intentionally unassigned.
 The production ground-station screen exposes this bounded receive-only check at
 **Settings → Remote Controller → Check X-Star Sticks & Buttons** when Flight
 Simulator or Live X-Star is selected. It reports the recognized USB controller and
-validated input stream separately, sends zero bytes, and cannot route any event
+validated input stream separately, has no control-data OUT path, and cannot route any event
 to the live aircraft transport.
 
 ## Coverage and remaining boundary
