@@ -29,6 +29,7 @@ import io.xstarrevival.core.sim.SimulatorControlInput
 import io.xstarrevival.core.video.H264VideoFrame
 import kotlinx.coroutines.flow.Flow
 import java.io.File
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -279,6 +280,15 @@ private fun ControllerInputProbeControls(
             }
             probe.lastChunkHex?.let {
                 Text("Latest bytes · $it", style = MaterialTheme.typography.labelSmall)
+            }
+            if (probe.stickFramesRead > 0) {
+                val axes = probe.lastStickAxes.orEmpty().joinToString(" · ") {
+                    String.format(Locale.US, "%+.2f", it)
+                }
+                Text(
+                    "Simulator stick frames · ${probe.stickFramesRead} · axes $axes",
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
             if (probe.active) {
                 Button(onClick = onStop) { Text("Stop listening") }

@@ -95,11 +95,21 @@ controller. A hash-locked offline patcher now replaces only the stock stick
 callback: it builds the same bounded `0xAA` frame, sends that frame through the
 existing USART1 framed-data routine, and deliberately leaves the aircraft CAN
 stick queue inactive. The controller's normal button callback is unchanged.
-This produces a decoded research image only; it cannot be installed until the
-RC-PRO wrapper check and a controller backup/recovery procedure are solved.
-Once those safeguards exist, the first live question is whether the separate
-USB/video processor forwards the rerouted bytes to the Android accessory link.
-See `REMOTE-CONTROLLER-FIRMWARE.md` for the exact patch boundary and checks.
+The RC-PRO wrapper check is now solved, and exact-hash rebuilders produce both
+the replacement component and a structurally complete aggregate package. A
+full offline re-extraction verifies every component MD5, but the aggregate
+header field at offset `0x07` remains unlabelled and no controller
+backup/recovery procedure has been proven. The research package therefore must
+not be installed. Once those safeguards exist, the first live question is
+whether the separate USB/video processor forwards the rerouted bytes to the
+Android accessory link. See `REMOTE-CONTROLLER-FIRMWARE.md` for the exact patch
+boundary and checks.
+
+The Android input lab is ready for that test. Its incremental decoder accepts
+only checksum-valid nested `0xA5`/`0xAA` channel-3 frames, extracts the first
+four big-endian axes and normalizes the statically proven `0x400` center and
+`0x299` span. It deliberately labels them axis 0-3 until one-control-at-a-time
+movement proves the physical ordering; it does not guess a flight mapping.
 
 ## Coverage and remaining boundary
 

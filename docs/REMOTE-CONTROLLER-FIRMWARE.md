@@ -70,17 +70,20 @@ code begins, and all 58 plausible interrupt vectors map into the packaged
 application. Absolute control addresses therefore use file offset plus
 `0x08013000`. The decoder enforces that the reset handler maps into the image,
 preventing an incorrect base address from passing validation.
-The wrapper check words (`0x90CBCC63` and `0x54A06F0A`) are not identified by
-the common CRC-32 and Adler-32 variants tested so far. They are not required to
-validate the offline plaintext, but remain a blocker for any attempt to rebuild
-a flashable package.
+The wrapper check is now identified. It is the STM32 hardware-style,
+non-reflected CRC-32 with polynomial `0x04C11DB7`, initialized to zero. The
+decoded payload is padded to a 32-bit boundary with `0xFF` and fed as
+little-endian 32-bit words. This reproduces `0x90CBCC63` and `0x54A06F0A` for
+the two RC releases. It also reproduces the wrapper checks for every available
+OPTICAL, RFRX, RFTX, SONAR and TRANSFER component using the same wrapper, making
+the identification independent of the two RC samples.
 
 The aggregate manifest's component check is understood separately. Its `crc32`
 value is JAMCRC (the bitwise complement of the conventional CRC-32 result) over
 the complete RC component, including the wrapper and encrypted payload. This
 reproduces `0xC340559D` for V1.0.0.37 and `0x1B6C66B4` for V1.0.1.5. The wrapper's
-own check word at offset `0x24` is still unknown and is the remaining packaging
-integrity blocker.
+own check word at offset `0x24` can therefore be rebuilt after an offline
+application change.
 
 ## Reproducing the result
 
@@ -138,12 +141,36 @@ python tools/firmware/patch_rc_simulator_firmware.py \
   -o X3P_RC_V1.0.1.5.simulator-only.decoded.bin
 ```
 
-This output is deliberately **not flashable**. It is decoded application data,
-not a rebuilt RC-PRO package, and the inner wrapper check algorithm and a tested
-controller recovery path are not yet available. Even after packaging is solved,
-the separate USB/video processor still has to be tested to determine whether it
-forwards this new USART1 payload to the Android accessory connection. Static
-analysis makes that route plausible; it does not prove it.
+This output is deliberately **not flashable** because it is decoded application
+data rather than an RC-PRO component. The wrapper check algorithm is now solved,
+and `tools/firmware/rebuild_rc_simulator_component.py` can restore the exact
+stock wrapper and AES packaging around the verified simulator image. That
+rebuilder accepts only the exact stock and patched hashes, verifies the wrapper
+CRC and performs a complete encryption/decryption round trip. Its output is
+then accepted by `tools/firmware/rebuild_xstar_simulator_aggregate.py`, which
+replaces only component type 8 in the exact preserved V2.0.12 aggregate and
+updates its manifest MD5 and JAMCRC. A complete re-extraction verifies all 17
+component MD5 values. The aggregate header's unlabelled four-byte field at
+offset `0x07` remains unresolved and is preserved, so the aggregate remains a
+research artifact rather than an approved update. A tested controller
+backup/recovery path is also not yet available. The separate USB/video
+processor still has to be tested to determine whether it forwards the new
+USART1 payload to Android.
+
+```bash
+python tools/firmware/rebuild_rc_simulator_component.py \
+  X3P_RC_V1.0.1.5_20170713.BIN \
+  X3P_RC_V1.0.1.5.simulator-only.decoded.bin \
+  -o X3P_RC_SIMULATOR.BIN
+
+python tools/firmware/rebuild_xstar_simulator_aggregate.py \
+  X3P_FW_900M_V2.0.12.bin \
+  X3P_RC_SIMULATOR.BIN \
+  -o X3P_FW_900M_V2.0.12_SIMULATOR.bin
+```
+
+Both rebuilders refuse to overwrite an output and contain no hardware access
+or update path.
 
 ## Physical-control path in V1.0.1.5
 
@@ -233,12 +260,12 @@ does not by itself prove that the Micro-USB port can stream controls.
 The V1.0.1.5 image is the correct target for controller interoperability
 research. The software-only route now changes the priorities to:
 
-1. verify the offline callback replacement byte-for-byte and keep it isolated
-   from all updater and device code;
-2. identify the wrapper check algorithm and document a full backup/recovery
-   procedure before any controller write;
-3. test whether the controller's separate USB/video processor forwards the
-   rerouted USART1 stick frames to Android;
+1. retain the byte-for-byte verified callback replacement and hash-locked
+   component/aggregate rebuilders as offline-only tools;
+2. resolve the aggregate header field at offset `0x07` and document a full
+   backup/recovery procedure before any controller write;
+3. only after those safeguards, test whether the controller's separate
+   USB/video processor forwards the rerouted USART1 stick frames to Android;
 4. capture one control at a time and map all axis ranges, centers, directions
    and event debounce behavior; and
 5. translate the observed frames into the simulator input model while retaining

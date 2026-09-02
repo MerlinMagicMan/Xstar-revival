@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.usb.UsbManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import io.xstarrevival.core.sim.RcSimulatorAccessoryDecoder
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -42,6 +43,8 @@ internal data class ControllerProbeUiState(
     val lastChunkHex: String? = null,
     val stopReason: ControllerProbeStopReason? = null,
     val capturePath: String? = null,
+    val stickFramesRead: Long = 0,
+    val lastStickAxes: List<Double>? = null,
     val error: String? = null
 ) {
     val active: Boolean
@@ -141,9 +144,12 @@ internal class ControllerUsbInputProbe(
         var bytesRead = 0L
         var chunksRead = 0L
         var lastHex: String? = null
+        var stickFramesRead = 0L
+        var lastStickAxes: List<Double>? = null
         var failure: String? = null
         var reason: ControllerProbeStopReason? = null
         var lastPublishedAt = startedAt
+        val frameDecoder = RcSimulatorAccessoryDecoder()
 
         try {
             FileInputStream(opened.fileDescriptor).use { usbInput ->
@@ -161,9 +167,19 @@ internal class ControllerUsbInputProbe(
                             bytesRead = captureSink.bytesWritten
                             chunksRead++
                             lastHex = buffer.copyOfRange(0, minOf(keep, HEX_PREVIEW_BYTES)).toHex()
+                            val stickFrames = frameDecoder.append(buffer, keep)
+                            stickFramesRead += stickFrames.size
+                            lastStickAxes = stickFrames.lastOrNull()?.normalizedAxes ?: lastStickAxes
                             val now = elapsedRealtimeMs()
                             if (now - lastPublishedAt >= UI_UPDATE_INTERVAL_MS) {
-                                publish(bytesRead, chunksRead, now - startedAt, lastHex)
+                                publish(
+                                    bytesRead,
+                                    chunksRead,
+                                    now - startedAt,
+                                    lastHex,
+                                    stickFramesRead,
+                                    lastStickAxes
+                                )
                                 lastPublishedAt = now
                             }
                         }
@@ -199,18 +215,29 @@ internal class ControllerUsbInputProbe(
                 lastChunkHex = lastHex,
                 stopReason = finalReason,
                 capturePath = captureFile.takeIf { failure == null }?.absolutePath,
+                stickFramesRead = stickFramesRead,
+                lastStickAxes = lastStickAxes,
                 error = failure
             )
         }
     }
 
-    private fun publish(bytesRead: Long, chunksRead: Long, elapsedMs: Long, lastHex: String?) {
+    private fun publish(
+        bytesRead: Long,
+        chunksRead: Long,
+        elapsedMs: Long,
+        lastHex: String?,
+        stickFramesRead: Long,
+        lastStickAxes: List<Double>?
+    ) {
         mutableState.value = ControllerProbeUiState(
             status = ControllerProbeStatus.READING,
             bytesRead = bytesRead,
             chunksRead = chunksRead,
             elapsedMs = elapsedMs.coerceAtLeast(0),
-            lastChunkHex = lastHex
+            lastChunkHex = lastHex,
+            stickFramesRead = stickFramesRead,
+            lastStickAxes = lastStickAxes
         )
     }
 
