@@ -56,4 +56,43 @@ class ControllerUsbIdentityClassifierTest {
         assertEquals(ControllerUsbStatus.DISCONNECTED, state.status)
         assertFalse(state.controllerDetected)
     }
+
+    @Test
+    fun `recognizes the direct Autel remote controller USB identity`() {
+        val directRemote = ControllerUsbIdentity(
+            manufacturer = "Autel",
+            model = "Remote Control",
+            version = "2.00",
+            vendorId = 0x6175,
+            productId = 0x5243
+        )
+
+        val state = ControllerUsbIdentityClassifier.classify(
+            accessories = emptyList(),
+            devices = listOf(directRemote)
+        )
+
+        assertEquals(ControllerUsbStatus.XSTAR, state.status)
+        assertEquals(directRemote, state.identity)
+        assertTrue(state.controllerDetected)
+    }
+
+    @Test
+    fun `does not trust a lookalike direct USB device by name alone`() {
+        val lookalike = ControllerUsbIdentity(
+            manufacturer = "Autel",
+            model = "Remote Control",
+            version = "2.00",
+            vendorId = 0x1234,
+            productId = 0x5678
+        )
+
+        val state = ControllerUsbIdentityClassifier.classify(
+            accessories = emptyList(),
+            devices = listOf(lookalike)
+        )
+
+        assertEquals(ControllerUsbStatus.OTHER_ACCESSORY, state.status)
+        assertFalse(state.controllerDetected)
+    }
 }
