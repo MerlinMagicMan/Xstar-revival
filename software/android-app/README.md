@@ -138,8 +138,17 @@ The passive input lab also contains a bounded incremental decoder for the simula
 firmware experiment. It recognizes only checksum-valid nested `0xA5`/`0xAA` channel-3 frames and
 reports the first four big-endian axes without assigning them to physical sticks. Static firmware
 analysis proves a center value of `0x400` and a calibrated span of `0x299`; the physical axis order
-remains intentionally unassigned until a one-control-at-a-time live capture proves it. The decoder
-does not send USB data or route controls to a live aircraft.
+remains intentionally unassigned until a one-control-at-a-time live capture proves it. It also
+recognizes the stock nested `0xA5`/`0xFE` selector `0x81` button frame only after validating its
+outer additive checksum, exact eight-byte event payload, protocol fields and X25 CRC. Event IDs are
+reported as knob, record, settings, photo, selector or flight-stick-mode using the static firmware
+map; the raw state value remains visible until live press/release captures prove its semantics. The
+decoder does not send USB data or route controls to a live aircraft.
+
+In the normal ground-station UI, **Settings → Remote Controller → Check X-Star
+Sticks & Buttons** starts the same bounded passive check while either Flight
+Simulator or Live X-Star is selected. It stops after 20 seconds or 1 MB and
+shows only checksum-validated stick/button counts and the latest raw values.
 
 The validated AAR from Autel's Android sample repository has SHA-256 `138bd68f0986ac7009362cde01f9e54e4ee33e0f2ed2548e382205a59dcd7e17` and contains both `arm64-v8a` and `armeabi-v7a` native libraries. When the file is absent, the `Live X-Star` source and all proprietary classes are omitted from the build.
 

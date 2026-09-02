@@ -6,12 +6,16 @@ package io.xstarrevival.core.sim
  * Axis order is intentionally left as 0-3 until a one-control-at-a-time live
  * capture proves which physical stick owns each channel.
  */
+sealed interface RcSimulatorAccessoryFrame {
+    val outerChannel: Int
+}
+
 data class RcSimulatorStickFrame(
-    val outerChannel: Int,
+    override val outerChannel: Int,
     val innerChannel: Int,
     val controlPayload: List<Int>,
     val axisValues: List<Int>
-) {
+) : RcSimulatorAccessoryFrame {
     val normalizedAxes: List<Double> = axisValues.map { value ->
         ((value - AXIS_CENTER).toDouble() / AXIS_SPAN).coerceIn(-1.0, 1.0)
     }
@@ -22,15 +26,43 @@ data class RcSimulatorStickFrame(
     }
 }
 
+/** A checksum-validated selector 0x81 event from the stock RC button path. */
+data class RcSimulatorButtonFrame(
+    override val outerChannel: Int,
+    val messageId: Int,
+    val sequence: Int,
+    val eventPayload: List<Int>,
+    val eventId: Int,
+    val stateValue: Int
+) : RcSimulatorAccessoryFrame {
+    val controlName: String? = when (eventId) {
+        1 -> "KNOB"
+        2 -> "RECORD"
+        3 -> "SETTINGS"
+        4 -> "PHOTO"
+        5 -> "SELECTOR"
+        6 -> "FLIGHT_STICK_MODE"
+        else -> null
+    }
+}
+
 /**
  * Incrementally decodes the nested A5/AA framing produced by the simulator-only
- * RC patch. Both stock additive checksums and both channel fields are verified.
- * The decoder has no Android, USB, radio, or aircraft dependency.
+ * RC patch. The stock additive checksums and the relevant channel/message
+ * fields are verified. The decoder has no Android, USB, radio, or aircraft
+ * dependency.
  */
 class RcSimulatorAccessoryDecoder {
     private var pending = byteArrayOf()
 
     fun append(chunk: ByteArray, count: Int = chunk.size): List<RcSimulatorStickFrame> {
+        return appendFrames(chunk, count).filterIsInstance<RcSimulatorStickFrame>()
+    }
+
+    fun appendFrames(
+        chunk: ByteArray,
+        count: Int = chunk.size
+    ): List<RcSimulatorAccessoryFrame> {
         require(count in 0..chunk.size) { "count must be within the supplied chunk" }
         if (count == 0) return emptyList()
 
@@ -39,7 +71,7 @@ class RcSimulatorAccessoryDecoder {
         chunk.copyInto(input, destinationOffset = pending.size, endIndex = count)
         pending = byteArrayOf()
 
-        val decoded = mutableListOf<RcSimulatorStickFrame>()
+        val decoded = mutableListOf<RcSimulatorAccessoryFrame>()
         var cursor = 0
         while (cursor < input.size) {
             val start = input.indexOfHeader(OUTER_HEADER, cursor)
@@ -68,7 +100,7 @@ class RcSimulatorAccessoryDecoder {
                 start + HEADER_BYTES,
                 start + totalLength - CHECKSUM_BYTES
             )
-            decodeStickPayload(input[start + 1].unsigned(), outerPayload)?.let(decoded::add)
+            decodePayload(input[start + 1].unsigned(), outerPayload)?.let(decoded::add)
             cursor = start + totalLength
         }
         return decoded
@@ -78,12 +110,23 @@ class RcSimulatorAccessoryDecoder {
         pending = byteArrayOf()
     }
 
+    private fun decodePayload(
+        outerChannel: Int,
+        innerFrame: ByteArray
+    ): RcSimulatorAccessoryFrame? {
+        if (outerChannel != CONTROL_CHANNEL || innerFrame.isEmpty()) return null
+        return when (innerFrame[0].unsigned()) {
+            STICK_HEADER -> decodeStickPayload(outerChannel, innerFrame)
+            BUTTON_HEADER -> decodeButtonPayload(outerChannel, innerFrame)
+            else -> null
+        }
+    }
+
     private fun decodeStickPayload(
         outerChannel: Int,
         innerFrame: ByteArray
     ): RcSimulatorStickFrame? {
-        if (outerChannel != CONTROL_CHANNEL || innerFrame.size < MIN_STICK_FRAME_BYTES) return null
-        if (innerFrame[0].unsigned() != INNER_HEADER) return null
+        if (innerFrame.size < MIN_STICK_FRAME_BYTES) return null
 
         val encodedLength = innerFrame[2].unsigned()
         if (encodedLength + FRAME_OVERHEAD != innerFrame.size) return null
@@ -98,6 +141,37 @@ class RcSimulatorAccessoryDecoder {
             (payload[index * 2] shl 8) or payload[index * 2 + 1]
         }
         return RcSimulatorStickFrame(outerChannel, innerChannel, payload, axes)
+    }
+
+    private fun decodeButtonPayload(
+        outerChannel: Int,
+        innerFrame: ByteArray
+    ): RcSimulatorButtonFrame? {
+        if (innerFrame.size != BUTTON_FRAME_BYTES) return null
+        val payloadLength = innerFrame[1].unsigned()
+        if (payloadLength != BUTTON_PAYLOAD_BYTES) return null
+        if (innerFrame.size != payloadLength + BUTTON_FRAME_OVERHEAD) return null
+        if (innerFrame[3].unsigned() != BUTTON_MESSAGE_ID) return null
+        if (innerFrame[4].unsigned() != BUTTON_PROTOCOL_VERSION) return null
+        if (innerFrame[5].unsigned() != BUTTON_MESSAGE_TYPE) return null
+
+        val calculatedCrc = innerFrame.x25Crc(
+            start = 1,
+            endExclusive = innerFrame.size - BUTTON_CRC_BYTES
+        )
+        val expectedCrc = innerFrame[innerFrame.size - 2].unsigned() or
+            (innerFrame[innerFrame.size - 1].unsigned() shl 8)
+        if (calculatedCrc != expectedCrc) return null
+
+        val payload = innerFrame.copyOfRange(6, 6 + payloadLength).map { it.unsigned() }
+        return RcSimulatorButtonFrame(
+            outerChannel = outerChannel,
+            messageId = BUTTON_MESSAGE_ID,
+            sequence = innerFrame[2].unsigned(),
+            eventPayload = payload,
+            eventId = payload[0],
+            stateValue = payload[1]
+        )
     }
 
     private fun ByteArray.indexOfHeader(header: Int, fromIndex: Int): Int {
@@ -115,11 +189,25 @@ class RcSimulatorAccessoryDecoder {
         return sum == this[start + totalLength - CHECKSUM_BYTES].unsigned()
     }
 
+    private fun ByteArray.x25Crc(start: Int, endExclusive: Int): Int {
+        var crc = 0xFFFF
+        for (index in start until endExclusive) {
+            var temporary = unsigned(index) xor (crc and 0xFF)
+            temporary = (temporary xor (temporary shl 4)) and 0xFF
+            crc = ((crc ushr 8) xor (temporary shl 8) xor (temporary shl 3) xor
+                (temporary ushr 4)) and 0xFFFF
+        }
+        return crc
+    }
+
+    private fun ByteArray.unsigned(index: Int): Int = this[index].unsigned()
+
     private fun Byte.unsigned(): Int = toInt() and 0xFF
 
     private companion object {
         const val OUTER_HEADER = 0xA5
-        const val INNER_HEADER = 0xAA
+        const val STICK_HEADER = 0xAA
+        const val BUTTON_HEADER = 0xFE
         const val CONTROL_CHANNEL = 3
         const val HEADER_BYTES = 3
         const val CHECKSUM_BYTES = 1
@@ -129,5 +217,12 @@ class RcSimulatorAccessoryDecoder {
         const val AXIS_COUNT = 4
         const val AXIS_BYTES = AXIS_COUNT * 2
         const val MIN_STICK_FRAME_BYTES = HEADER_BYTES + AXIS_BYTES + CHECKSUM_BYTES
+        const val BUTTON_PAYLOAD_BYTES = 8
+        const val BUTTON_FRAME_OVERHEAD = 8
+        const val BUTTON_FRAME_BYTES = BUTTON_PAYLOAD_BYTES + BUTTON_FRAME_OVERHEAD
+        const val BUTTON_CRC_BYTES = 2
+        const val BUTTON_MESSAGE_ID = 0x10
+        const val BUTTON_PROTOCOL_VERSION = 1
+        const val BUTTON_MESSAGE_TYPE = 0xF0
     }
 }

@@ -5,6 +5,8 @@ import android.hardware.usb.UsbManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import io.xstarrevival.core.sim.RcSimulatorAccessoryDecoder
+import io.xstarrevival.core.sim.RcSimulatorButtonFrame
+import io.xstarrevival.core.sim.RcSimulatorStickFrame
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -45,6 +47,10 @@ internal data class ControllerProbeUiState(
     val capturePath: String? = null,
     val stickFramesRead: Long = 0,
     val lastStickAxes: List<Double>? = null,
+    val buttonFramesRead: Long = 0,
+    val lastButtonEventId: Int? = null,
+    val lastButtonStateValue: Int? = null,
+    val lastButtonName: String? = null,
     val error: String? = null
 ) {
     val active: Boolean
@@ -146,6 +152,10 @@ internal class ControllerUsbInputProbe(
         var lastHex: String? = null
         var stickFramesRead = 0L
         var lastStickAxes: List<Double>? = null
+        var buttonFramesRead = 0L
+        var lastButtonEventId: Int? = null
+        var lastButtonStateValue: Int? = null
+        var lastButtonName: String? = null
         var failure: String? = null
         var reason: ControllerProbeStopReason? = null
         var lastPublishedAt = startedAt
@@ -167,9 +177,17 @@ internal class ControllerUsbInputProbe(
                             bytesRead = captureSink.bytesWritten
                             chunksRead++
                             lastHex = buffer.copyOfRange(0, minOf(keep, HEX_PREVIEW_BYTES)).toHex()
-                            val stickFrames = frameDecoder.append(buffer, keep)
+                            val accessoryFrames = frameDecoder.appendFrames(buffer, keep)
+                            val stickFrames = accessoryFrames.filterIsInstance<RcSimulatorStickFrame>()
+                            val buttonFrames = accessoryFrames.filterIsInstance<RcSimulatorButtonFrame>()
                             stickFramesRead += stickFrames.size
                             lastStickAxes = stickFrames.lastOrNull()?.normalizedAxes ?: lastStickAxes
+                            buttonFramesRead += buttonFrames.size
+                            buttonFrames.lastOrNull()?.let { button ->
+                                lastButtonEventId = button.eventId
+                                lastButtonStateValue = button.stateValue
+                                lastButtonName = button.controlName
+                            }
                             val now = elapsedRealtimeMs()
                             if (now - lastPublishedAt >= UI_UPDATE_INTERVAL_MS) {
                                 publish(
@@ -178,7 +196,11 @@ internal class ControllerUsbInputProbe(
                                     now - startedAt,
                                     lastHex,
                                     stickFramesRead,
-                                    lastStickAxes
+                                    lastStickAxes,
+                                    buttonFramesRead,
+                                    lastButtonEventId,
+                                    lastButtonStateValue,
+                                    lastButtonName
                                 )
                                 lastPublishedAt = now
                             }
@@ -217,6 +239,10 @@ internal class ControllerUsbInputProbe(
                 capturePath = captureFile.takeIf { failure == null }?.absolutePath,
                 stickFramesRead = stickFramesRead,
                 lastStickAxes = lastStickAxes,
+                buttonFramesRead = buttonFramesRead,
+                lastButtonEventId = lastButtonEventId,
+                lastButtonStateValue = lastButtonStateValue,
+                lastButtonName = lastButtonName,
                 error = failure
             )
         }
@@ -228,7 +254,11 @@ internal class ControllerUsbInputProbe(
         elapsedMs: Long,
         lastHex: String?,
         stickFramesRead: Long,
-        lastStickAxes: List<Double>?
+        lastStickAxes: List<Double>?,
+        buttonFramesRead: Long,
+        lastButtonEventId: Int?,
+        lastButtonStateValue: Int?,
+        lastButtonName: String?
     ) {
         mutableState.value = ControllerProbeUiState(
             status = ControllerProbeStatus.READING,
@@ -237,7 +267,11 @@ internal class ControllerUsbInputProbe(
             elapsedMs = elapsedMs.coerceAtLeast(0),
             lastChunkHex = lastHex,
             stickFramesRead = stickFramesRead,
-            lastStickAxes = lastStickAxes
+            lastStickAxes = lastStickAxes,
+            buttonFramesRead = buttonFramesRead,
+            lastButtonEventId = lastButtonEventId,
+            lastButtonStateValue = lastButtonStateValue,
+            lastButtonName = lastButtonName
         )
     }
 

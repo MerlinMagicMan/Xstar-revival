@@ -113,7 +113,17 @@ The Android input lab is ready for that test. Its incremental decoder accepts
 only checksum-valid nested `0xA5`/`0xAA` channel-3 frames, extracts the first
 four big-endian axes and normalizes the statically proven `0x400` center and
 `0x299` span. It deliberately labels them axis 0-3 until one-control-at-a-time
-movement proves the physical ordering; it does not guess a flight mapping.
+movement proves the physical ordering; it does not guess a flight mapping. It
+also validates the unchanged stock `0xA5`/`0xFE` selector `0x81` path, including
+the exact protocol fields, eight-byte event payload and X25 CRC, before exposing
+the raw event ID/state. The statically proven event names are displayed, while
+live press/release semantics remain intentionally unassigned.
+
+The production ground-station screen exposes this bounded receive-only check at
+**Settings → Remote Controller → Check X-Star Sticks & Buttons** when Flight
+Simulator or Live X-Star is selected. It reports the USB accessory and
+validated input stream separately, sends zero bytes, and cannot route any event
+to the live aircraft transport.
 
 ## Coverage and remaining boundary
 

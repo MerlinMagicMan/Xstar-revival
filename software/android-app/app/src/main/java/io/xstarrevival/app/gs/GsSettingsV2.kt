@@ -44,8 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.xstarrevival.app.TelemetrySource
+import io.xstarrevival.app.ControllerInputLinkStatus
+import io.xstarrevival.app.ControllerProbeUiState
+import io.xstarrevival.app.ControllerUsbStatus
+import io.xstarrevival.app.ControllerUsbUiState
 import io.xstarrevival.app.SimulatorControllerInputUiState
 import io.xstarrevival.app.SimulatorBridgeUiState
+import io.xstarrevival.app.controllerInputLinkStatus
 import io.xstarrevival.core.command.CommandStatus
 import io.xstarrevival.core.model.XStarState
 import androidx.compose.material.icons.Icons
@@ -62,14 +67,18 @@ enum class GsSettingsFamily(val title: String, val subtitle: String) {
 }
 
 @Composable
-fun GsSettingsV2Screen(
+internal fun GsSettingsV2Screen(
     state: XStarState,
     source: TelemetrySource,
     simulatorControllerInput: SimulatorControllerInputUiState,
+    controllerUsb: ControllerUsbUiState,
+    controllerProbe: ControllerProbeUiState,
     simulatorBridge: SimulatorBridgeUiState,
     onSimulatorVideoLinkChannel: (Boolean, Int?) -> Unit,
     onSimulatorControllerConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
     onSimulatorControllerCalibration: () -> Unit,
+    onStartControllerProbe: () -> Unit,
+    onStopControllerProbe: () -> Unit,
     onSimulatorGimbalRecenter: () -> Unit,
     onSimulatorGimbalCalibration: () -> Unit,
     onSimulatorGimbalConfiguration: (Double, Double, Double) -> Unit,
@@ -121,8 +130,12 @@ fun GsSettingsV2Screen(
                         state,
                         source,
                         simulatorControllerInput,
+                        controllerUsb,
+                        controllerProbe,
                         onSimulatorControllerConfiguration,
-                        onSimulatorControllerCalibration
+                        onSimulatorControllerCalibration,
+                        onStartControllerProbe,
+                        onStopControllerProbe
                     )
                     GsSettingsFamily.SIMULATOR -> SimulatorSettings(
                         source,
@@ -215,10 +228,15 @@ private fun RemoteSettings(
     state: XStarState,
     source: TelemetrySource,
     simulatorControllerInput: SimulatorControllerInputUiState,
+    controllerUsb: ControllerUsbUiState,
+    controllerProbe: ControllerProbeUiState,
     onSimulatorConfiguration: (Int, Double, Double, Double, Map<String, String>, Boolean) -> Unit,
-    onSimulatorCalibration: () -> Unit
+    onSimulatorCalibration: () -> Unit,
+    onStartControllerProbe: () -> Unit,
+    onStopControllerProbe: () -> Unit
 ) {
     val canCommand = source == TelemetrySource.SIMULATOR
+    val canProbe = source in setOf(TelemetrySource.SIMULATOR, TelemetrySource.OFFICIAL_AUTEL)
     val grounded = state.aircraft.armed == false && state.navigation.altitudeM?.let { it <= .2 } == true
     SettingsToggle("Stick Mode 2", "Throttle/yaw left; pitch/roll right", settings.controllerMode2) { update(settings.copy(controllerMode2 = it)) }
     SettingsSlider("Stick sensitivity", settings.controllerSensitivity, .1f..1f, "") { update(settings.copy(controllerSensitivity = it)) }
@@ -271,6 +289,45 @@ private fun RemoteSettings(
         }
     )
     GsSettingLine("Last simulator button", simulatorControllerInput.lastAction?.name?.replace('_', ' ') ?: "—")
+    val probeLink = controllerInputLinkStatus(controllerUsb, controllerProbe)
+    GsSettingLine(
+        "X-Star USB accessory",
+        when (controllerUsb.status) {
+            ControllerUsbStatus.XSTAR -> "CONNECTED"
+            ControllerUsbStatus.XSTAR_LEGACY -> "CONNECTED · LEGACY"
+            ControllerUsbStatus.OTHER_ACCESSORY -> "OTHER ACCESSORY"
+            ControllerUsbStatus.DISCONNECTED -> "DISCONNECTED"
+        }
+    )
+    GsSettingLine(
+        "Passive X-Star stream",
+        when (probeLink) {
+            ControllerInputLinkStatus.DISCONNECTED -> "Connect controller"
+            ControllerInputLinkStatus.USB_READY -> "Ready to check"
+            ControllerInputLinkStatus.LISTENING -> "Listening · ${controllerProbe.elapsedMs / 1000}s"
+            ControllerInputLinkStatus.STREAMING ->
+                "Streaming · ${controllerProbe.stickFramesRead} stick · ${controllerProbe.buttonFramesRead} button"
+            ControllerInputLinkStatus.INPUT_STREAM_UNAVAILABLE -> "No input frames received"
+            ControllerInputLinkStatus.ERROR -> "Error · ${controllerProbe.error ?: "unknown"}"
+        }
+    )
+    controllerProbe.lastStickAxes?.let { axes ->
+        GsSettingLine("X-Star raw axes 0/1/2/3", axes.joinToString(" / ") { "%+.2f".format(it) })
+    }
+    if (controllerProbe.buttonFramesRead > 0) {
+        GsSettingLine(
+            "Last X-Star control event",
+            "${controllerProbe.lastButtonName ?: "EVENT ${controllerProbe.lastButtonEventId}"} · " +
+                "raw state ${controllerProbe.lastButtonStateValue}"
+        )
+    }
+    OutlinedButton(
+        onClick = if (controllerProbe.active) onStopControllerProbe else onStartControllerProbe,
+        enabled = canProbe && controllerUsb.controllerDetected,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (controllerProbe.active) "STOP PASSIVE INPUT CHECK" else "CHECK X-STAR STICKS & BUTTONS")
+    }
     GsSettingLine(
         "Stick input T/Y/P/R",
         listOf(state.remote.throttleInput, state.remote.yawInput, state.remote.pitchInput, state.remote.rollInput)
@@ -285,6 +342,7 @@ private fun RemoteSettings(
         fontSize = 10.sp
     )
     if (!canCommand) Text("Controller writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
+    Text("Passive X-Star check sends 0 bytes and stops after 20 seconds or 1 MB.", color = GsColors.Muted, fontSize = 10.sp)
     if (!grounded) Text("Controller calibration requires the aircraft landed and disarmed.", color = GsColors.Amber, fontSize = 10.sp)
 }
 
