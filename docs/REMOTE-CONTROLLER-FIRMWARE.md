@@ -64,11 +64,12 @@ interrupt vectors.
 | V1.0.0.37 | 410,252 | `32673d1bd2aebd83a5d4c48cb0daeff186f02f9e8095746e9040aada80087039` | `0x20006E00` | `0x08013165` |
 | V1.0.1.5 | 380,228 | `3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718` | `0x20007200` | `0x08013165` |
 
-The application is an STM32 Cortex-M Thumb image mapped from `0x08020000`.
-Its first vector-table entries point into both the application region and a
-lower controller bootloader region; in particular, the reset entry
-`0x08013165` is below the packaged application. Absolute control addresses must
-therefore use file offset plus `0x08020000`, not plus `0x08000000`.
+The application is an STM32 Cortex-M Thumb image mapped from `0x08013000`.
+The reset entry `0x08013165` maps to file offset `0x164`, where valid startup
+code begins, and all 58 plausible interrupt vectors map into the packaged
+application. Absolute control addresses therefore use file offset plus
+`0x08013000`. The decoder enforces that the reset handler maps into the image,
+preventing an incorrect base address from passing validation.
 The wrapper check words (`0x90CBCC63` and `0x54A06F0A`) are not identified by
 the common CRC-32 and Adler-32 variants tested so far. They are not required to
 validate the offline plaintext, but remain a blocker for any attempt to rebuild
@@ -108,8 +109,8 @@ device, sends a controller command or performs a firmware update.
 ## Physical-control path in V1.0.1.5
 
 Static disassembly provides the first concrete physical-button map. Function
-`0x08028F9C` monitors five values and submits an 8-byte event through the common
-dispatch routine at `0x08039558`. The dispatch selector is `0x81`; byte zero
+`0x0801BF9C` monitors five values and submits an 8-byte event through the common
+dispatch routine at `0x0802C558`. The dispatch selector is `0x81`; byte zero
 is the event ID and byte one is the state value.
 
 | Event ID | Firmware debug label | Physical meaning |
@@ -121,15 +122,32 @@ is the event ID and byte one is the state value.
 | 5 | `CANSELKEY` | selector key |
 | 6 | `FLYSTICK` | flight-stick mode/state event |
 
-The much larger routine beginning at `0x0803D074` is the main control update.
-It samples four joystick axes through `0x0802A478`, using channel indices 0-3,
+The much larger routine beginning at `0x08030074` is the main control update.
+It samples four joystick axes through `0x0801D478`, using channel indices 0-3,
 and stores the normalized values in consecutive 16-bit fields. Its control-data
 builder submits a variable-length buffer with dispatch selector `0x210` through
-the same `0x08039558` routine. The dispatcher walks a RAM table of registered
+the same `0x0802C558` routine. The dispatcher walks a RAM table of registered
 selector/callback pairs and invokes every match. Selector `0x81` is registered
-to callback `0x08027BD9`; selector `0x210` is registered to callback
-`0x080277C5`. This proves the in-firmware message paths, but not yet the physical
-port on which their data can be observed.
+to callback `0x08027BD8`; selector `0x210` is registered to callback
+`0x080277C4`.
+
+The two callbacks lead to distinct transports:
+
+- Selector `0x81` wraps each 8-byte control event in an inner `0xFE` frame with
+  a sequence/type field and CRC-16. It then adds an outer `0xA5`, channel 3,
+  length and checksum frame. The transmit queue at `0x0802E56C` ultimately
+  writes the bytes to `0x40013804`, the STM32F1 USART1 data register.
+- Selector `0x210` wraps the variable-length flight-control data in an `0xAA`,
+  channel 3, length and checksum frame. It places the result in a bounded
+  128-byte buffer. The link state machine beginning at `0x08019204` drains that
+  buffer through `0x0802C4B0`, which splits it into 8-byte CAN frames.
+  `0x080187D0` selects a transmit mailbox and writes the identifier, data length
+  and two 32-bit payload words into the bxCAN transmit registers. The hard-coded
+  peripheral base is `0x40006400`, identifying the physical endpoint as CAN1.
+
+USART1 here is an internal MCU hardware path; this finding does not identify it
+as the Mac-visible Micro-USB port. The live Micro-USB CDC tests remain valid:
+that exposed service port produced no controller stream with the aircraft off.
 
 The image also contains calibration handlers and strings for `CANMODE`,
 `RFMODE`, `DEBUGROCKER`, `DEBUGKEY`, `PhoneSet:CanMode`, `SIMULATED FLIGHT`,
@@ -144,9 +162,8 @@ does not by itself prove that the Micro-USB port can stream controls.
 The V1.0.1.5 image is the correct target for controller interoperability
 research. The decoded control path changes the next priorities to:
 
-1. trace callbacks `0x08027BD9` (`0x81`) and `0x080277C5` (`0x210`) to the
-   CAN, radio or USB drivers and identify where those messages leave the
-   controller;
+1. identify the controller board connections and electrical levels for the
+   selector `0x81` USART1 stream and selector `0x210` CAN1 stream;
 2. capture that path passively while moving one control at a time;
 3. map all axis ranges, centers, direction and event debounce behavior;
 4. translate the observed frames into the simulator's standard gamepad input;
@@ -160,8 +177,8 @@ controller.
 
 ## Next evidence target
 
-Trace the registered callbacks for selectors `0x81` (discrete controls) and
-`0x210` (flight-control data) to the CAN, radio and USB drivers. A passive
-capture that correlates those messages with one-at-a-time stick and button
-movement is the evidence needed before the simulator adapter can be considered
-complete.
+Locate the selector `0x81` USART1 and selector `0x210` CAN1 board connections.
+A receive-only capture that correlates those messages with one-at-a-time stick
+and button movement is the evidence needed before the simulator adapter can be
+considered complete. Determine voltage levels and add appropriate isolation
+before attaching any capture hardware.

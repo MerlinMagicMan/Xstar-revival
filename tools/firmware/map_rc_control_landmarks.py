@@ -8,6 +8,7 @@ decoded image and never communicates with controller hardware.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import struct
 from collections import defaultdict
 from pathlib import Path
@@ -36,6 +37,34 @@ LANDMARKS = (
     b"Use the command sticks",
     b"Command sticks error",
 )
+
+
+KNOWN_CONTROL_PATHS = {
+    "3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718": (
+        "X3P RC-PRO V1.0.1.5",
+        (
+            ("physical_button_scan", 0x8F9C),
+            ("axis_sampler", 0xA478),
+            ("selector_0x210_callback", 0x147C4),
+            ("selector_0x81_callback", 0x14BD8),
+            ("aa_frame_builder", 0x15058),
+            ("a5_usart1_frame_builder", 0x150E0),
+            ("link_state_machine", 0x6204),
+            ("can1_mailbox_writer", 0x57D0),
+            ("can1_8byte_chunker", 0x194B0),
+            ("common_dispatcher", 0x19558),
+            ("usart1_tx_enqueue", 0x1B56C),
+            ("main_control_update", 0x1D074),
+        ),
+    ),
+}
+
+KNOWN_PERIPHERALS = {
+    "3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718": (
+        ("usart1_data_register", 0x40013804),
+        ("can1_register_base", 0x40006400),
+    ),
+}
 
 
 def find_all(data: bytes, needle: bytes) -> list[int]:
@@ -70,20 +99,40 @@ def main() -> None:
         "--base",
         type=lambda value: int(value, 0),
         default=APPLICATION_BASE,
-        help="application base address (default: 0x08020000)",
+        help=f"application base address (default: 0x{APPLICATION_BASE:08X})",
     )
     args = parser.parse_args()
 
-    data = args.firmware.read_bytes()
-    initial_sp, reset_vector, valid_vectors, application_vectors = validate_stm32_image(data)
+    try:
+        data = args.firmware.read_bytes()
+        initial_sp, reset_vector, valid_vectors, application_vectors = (
+            validate_stm32_image(data, args.base)
+        )
+    except (OSError, ValueError) as exc:
+        parser.exit(1, f"error: {exc}\n")
     references = thumb_adr_references(data, args.base)
 
     print(f"file={args.firmware}")
     print(f"base=0x{args.base:08X}")
     print(f"initial_stack_pointer=0x{initial_sp:08X}")
     print(f"reset_vector=0x{reset_vector:08X}")
+    print(f"reset_file_offset=0x{(reset_vector & ~1) - args.base:X}")
     print(f"plausible_interrupt_vectors={valid_vectors}")
     print(f"application_interrupt_vectors={application_vectors}")
+    digest = hashlib.sha256(data).hexdigest()
+    known = KNOWN_CONTROL_PATHS.get(digest)
+    if known:
+        image_name, control_paths = known
+        print(f"known_image={image_name}")
+        for label, offset in control_paths:
+            print(
+                f"control_path={label}\taddress=0x{args.base + offset:08X}"
+                f"\tfile_offset=0x{offset:X}"
+            )
+        for label, address in KNOWN_PERIPHERALS[digest]:
+            print(f"peripheral={label}\taddress=0x{address:08X}")
+    else:
+        print("known_image=UNKNOWN")
     for landmark in LANDMARKS:
         label = landmark.rstrip(b"\0").decode("ascii")
         offsets = find_all(data, landmark)
