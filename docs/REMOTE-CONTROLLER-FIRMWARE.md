@@ -2,7 +2,7 @@
 
 ## Preserved source packages
 
-Two independently recovered X-Star Premium aggregate packages now provide a
+Two independently recovered X-Star Premium aggregate packages provide a
 controller-firmware comparison set:
 
 | Aggregate package | SHA-256 | RC component | RC version |
@@ -38,29 +38,46 @@ The declared inner length is exact: rounding it up to the next 16-byte boundary
 and adding the `0xF0` wrapper reproduces the full component length in both
 releases.
 
-## Inner-payload finding
+## Decoded inner payload
 
-The inner payload is a deterministic 16-byte-block transform. It contains many
-identical 16-byte blocks, and the most common ciphertext block is identical in
-both controller releases:
+The inner payload is AES-128-ECB using this fixed key:
+
+```text
+2B 7E 15 16 28 AE D2 A6 AB F7 15 88 09 CF 4F 3C
+```
+
+The most common ciphertext block in both releases is:
 
 ```text
 7D F7 6B 0C 1A B8 99 B3 3E 42 F0 47 B9 1B 54 6F
 ```
 
-It occurs 8,233 times in V1.0.0.37 and 5,747 times in V1.0.1.5. Several other
-high-frequency ciphertext blocks also recur at comparable counts across both
-versions. This is strong evidence for a fixed-key, ECB-like 16-byte block
-transform over an MCU flash image. AES-128 ECB is a leading hypothesis, but it
-must not be labeled proven until the updater/bootloader implementation or key is
-recovered and a full plaintext image passes structural and integrity checks.
+It occurs 8,233 times in V1.0.0.37 and 5,747 times in V1.0.1.5. This is the
+published [NIST AES/OMAC test-vector](https://csrc.nist.gov/CSRC/media/Projects/Block-Cipher-Techniques/documents/BCM/proposed-modes/omac/omac-ad.pdf)
+result for an all-zero block under that key. Full decryption independently
+confirms the identification: both outputs have exact `0xFF` padding, valid
+STM32 SRAM stack pointers, Thumb reset vectors in flash and 58 plausible
+interrupt vectors.
 
-This finding explains why ordinary `file` and `strings` inspection does not yet
-expose the MCU architecture, USB descriptors, stick scanning, or button map.
+| RC version | Decoded bytes | Decoded SHA-256 | Initial SP | Reset vector |
+|---|---:|---|---|---|
+| V1.0.0.37 | 410,252 | `32673d1bd2aebd83a5d4c48cb0daeff186f02f9e8095746e9040aada80087039` | `0x20006E00` | `0x08013165` |
+| V1.0.1.5 | 380,228 | `3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718` | `0x20007200` | `0x08013165` |
 
-## Reproducing the inspection
+The application is an STM32 Cortex-M Thumb image mapped from `0x08020000`.
+Its first vector-table entries point into both the application region and a
+lower controller bootloader region; in particular, the reset entry
+`0x08013165` is below the packaged application. Absolute control addresses must
+therefore use file offset plus `0x08020000`, not plus `0x08000000`.
+The wrapper check words (`0x90CBCC63` and `0x54A06F0A`) are not identified by
+the common CRC-32 and Adler-32 variants tested so far. They are not required to
+validate the offline plaintext, but remain a blocker for any attempt to rebuild
+a flashable package.
 
-After extracting both aggregate packages into private directories:
+## Reproducing the result
+
+After extracting both aggregate packages into private directories, inspect the
+wrappers and compare ciphertext blocks:
 
 ```bash
 python tools/firmware/analyze_rc_firmware.py \
@@ -68,29 +85,83 @@ python tools/firmware/analyze_rc_firmware.py \
   --compare X3P_RC_V1.0.1.5_20170713.BIN
 ```
 
-The analyzer is read-only. It validates the wrapper, declared length, version
-duplication and 16-byte padding, then reports entropy and repeated-block data.
+Decode a local extracted component to a new file:
+
+```bash
+python tools/firmware/decode_rc_firmware.py \
+  X3P_RC_V1.0.1.5_20170713.BIN \
+  -o X3P_RC_V1.0.1.5.decoded.bin
+```
+
+Then reproduce the controller landmark map:
+
+```bash
+python tools/firmware/map_rc_control_landmarks.py \
+  X3P_RC_V1.0.1.5.decoded.bin
+```
+
+The analyzer, decoder and landmark mapper operate only on local files. The
+decoder refuses to overwrite an output and writes it only after the plaintext
+passes padding and STM32 vector-table checks. None of these tools opens a USB
+device, sends a controller command or performs a firmware update.
+
+## Physical-control path in V1.0.1.5
+
+Static disassembly provides the first concrete physical-button map. Function
+`0x08028F9C` monitors five values and submits an 8-byte event through the common
+dispatch routine at `0x08039558`. The dispatch selector is `0x81`; byte zero
+is the event ID and byte one is the state value.
+
+| Event ID | Firmware debug label | Physical meaning |
+|---:|---|---|
+| 1 | `CANKNOB` | rear knob/wheel |
+| 2 | `CANRECKEY` | record key |
+| 3 | `CANSETKEY` | settings key |
+| 4 | `CANPHKEY` | photo key |
+| 5 | `CANSELKEY` | selector key |
+| 6 | `FLYSTICK` | flight-stick mode/state event |
+
+The much larger routine beginning at `0x0803D074` is the main control update.
+It samples four joystick axes through `0x0802A478`, using channel indices 0-3,
+and stores the normalized values in consecutive 16-bit fields. Its control-data
+builder submits a variable-length buffer with dispatch selector `0x210` through
+the same `0x08039558` routine. The dispatcher walks a RAM table of registered
+selector/callback pairs and invokes every match. Selector `0x81` is registered
+to callback `0x08027BD9`; selector `0x210` is registered to callback
+`0x080277C5`. This proves the in-firmware message paths, but not yet the physical
+port on which their data can be observed.
+
+The image also contains calibration handlers and strings for `CANMODE`,
+`RFMODE`, `DEBUGROCKER`, `DEBUGKEY`, `PhoneSet:CanMode`, `SIMULATED FLIGHT`,
+`Use the command sticks`, `Command sticks error` and `App-controlled stick
+disabled`. Direct code references confirm the calibration, CAN button and
+`FLYSTICK` strings. The simulated-flight phrases live in the controller UI
+resource region; their presence proves that the release contains that UI, but
+does not by itself prove that the Micro-USB port can stream controls.
 
 ## Simulator relevance
 
-The V1.0.1.5 image is now the correct target for controller interoperability
-research. Once decoded, the highest-value items are:
+The V1.0.1.5 image is the correct target for controller interoperability
+research. The decoded control path changes the next priorities to:
 
-1. USB descriptor and CDC command handling;
-2. ADC/stick acquisition and calibration tables;
-3. physical-button and gimbal-wheel scan maps;
-4. controller-to-aircraft command-frame construction;
-5. the safest location for a simulator-only output mode, if the hardware and
-   recovery path make such a change defensible.
+1. trace callbacks `0x08027BD9` (`0x81`) and `0x080277C5` (`0x210`) to the
+   CAN, radio or USB drivers and identify where those messages leave the
+   controller;
+2. capture that path passively while moving one control at a time;
+3. map all axis ranges, centers, direction and event debounce behavior;
+4. translate the observed frames into the simulator's standard gamepad input;
+5. retain the external isolated adapter as the fallback if the existing frame
+   path cannot be exposed without an aircraft.
 
 Firmware modification is not the first experiment. A decoded and validated
-image, bootloader/recovery characterization, full backup path, and a reversible
-bench procedure are prerequisites before any write to the physical controller.
+image, bootloader/recovery characterization, full backup path and a reversible
+bench procedure remain prerequisites before any write to the physical
+controller.
 
 ## Next evidence target
 
-Recover the code that consumes the RC-PRO wrapper. The likely locations are the
-controller bootloader, an earlier controller dump, or a matching updater/native
-library. The repeated-block evidence supplies a known regression test: a
-candidate decoder must turn both releases into structurally valid MCU images and
-must reproduce the header integrity field or another independent checksum.
+Trace the registered callbacks for selectors `0x81` (discrete controls) and
+`0x210` (flight-control data) to the CAN, radio and USB drivers. A passive
+capture that correlates those messages with one-at-a-time stick and button
+movement is the evidence needed before the simulator adapter can be considered
+complete.

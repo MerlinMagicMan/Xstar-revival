@@ -156,10 +156,15 @@ X3P_RC_V1.0.1.5_20170713.BIN
 SHA-256 ac490bc3c3ec48c23b7dd6910fcf7ae593dc3dbc71ee6e125174a3b3d8bf4bb4
 ```
 
-Both use a validated `0xF0`-byte wrapper around a deterministic 16-byte-block
-payload. See `docs/REMOTE-CONTROLLER-FIRMWARE.md` and the read-only analyzer at
-`tools/firmware/analyze_rc_firmware.py`. The controller images remain private;
-only hashes, structural findings and tooling are public.
+Both use a validated `0xF0`-byte wrapper around an AES-128-ECB STM32 application.
+The decoded SHA-256 values are
+`32673d1bd2aebd83a5d4c48cb0daeff186f02f9e8095746e9040aada80087039`
+for V1.0.0.37 and
+`3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718`
+for V1.0.1.5. See `docs/REMOTE-CONTROLLER-FIRMWARE.md`, the
+offline decoder at `tools/firmware/decode_rc_firmware.py` and the static control
+mapper at `tools/firmware/map_rc_control_landmarks.py`. The controller images
+remain private; only hashes, structural findings and tooling are public.
 
 ## F. User Manual / Official Documentation
 

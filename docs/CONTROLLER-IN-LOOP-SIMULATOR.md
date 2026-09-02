@@ -63,9 +63,19 @@ Two new bounded receive-only captures remained exactly zero bytes while the left
 full travel. The only older non-empty raw capture contained seven identical native keepalive replies
 and no additional payload. The controller's reserved Micro-USB CDC service port also emitted no
 startup or stick data. With no aircraft available, the standard accessory path, official SDK upload
-path, and reserved service port therefore expose no usable control stream. Route 3 is now the
-recommended aircraft-off controller-in-the-loop path; its electrical attachment must remain
+path, and reserved service port therefore expose no usable control stream. Route 3 remains the
+proven aircraft-off fallback; its electrical attachment must remain
 removable and isolated from the controller radio/flight-command path.
+
+Static decoding of the final V1.0.1.5 controller application has now opened a
+preferable intermediate route. The stock firmware already samples four axes,
+maps the selector/photo/record/knob/settings controls, and builds control
+messages through one common dispatcher. It also preserves a simulated-flight
+UI. The next experiment is therefore a receive-only trace of the registered
+handlers for selectors `0x81` and `0x210`. If that message path can be
+exposed through the controller's existing ports, no controller modification or
+external stick adapter is needed. See `REMOTE-CONTROLLER-FIRMWARE.md` for the
+reproducible address map and the limits of this finding.
 
 ## Coverage and remaining boundary
 

@@ -3,8 +3,8 @@
 
 The aggregate X-Star firmware extractor must be run first. This tool parses the
 observed 0xF0-byte RC-PRO wrapper and reports structural evidence about the
-16-byte-block payload. It deliberately does not write output or attempt a
-firmware update.
+AES-128-ECB payload. It deliberately does not write output or attempt a
+firmware update. Use decode_rc_firmware.py for validated offline decoding.
 """
 
 from __future__ import annotations
@@ -21,6 +21,9 @@ from pathlib import Path
 MAGIC = bytes.fromhex("02 AA 55 AA")
 HEADER_SIZE = 0xF0
 BLOCK_SIZE = 16
+AES_ZERO_BLOCK_CIPHERTEXT = bytes.fromhex(
+    "7D F7 6B 0C 1A B8 99 B3 3E 42 F0 47 B9 1B 54 6F"
+)
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,8 @@ def describe(image: RcImage) -> None:
     print(f"repeated_block_instances={repeated_blocks}")
     print(f"repeated_block_ratio={repeated_blocks / total_blocks:.6f}")
     print("block_transform_evidence=" + ("STRONG" if repeated_blocks >= 32 else "LIMITED"))
+    print(f"aes_128_ecb_zero_block_count={counts[AES_ZERO_BLOCK_CIPHERTEXT]}")
+    print("cipher_identification=AES-128-ECB")
     for rank, (block, count) in enumerate(counts.most_common(8), start=1):
         print(f"common_block_{rank}={count}\t{block.hex()}")
 
