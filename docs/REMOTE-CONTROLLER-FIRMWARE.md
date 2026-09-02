@@ -261,9 +261,13 @@ as the Mac- or Android-visible Micro-USB port. Android identifies that interface
 as `0x6175:0x5243` (`Autel / Remote Control / 2.00`) with a 64-byte bulk-IN
 endpoint. A bounded app capture claimed only the CDC-data interface and read
 only that IN endpoint, with no control or OUT transfer. It received exactly zero
-bytes while the sticks moved. The earlier Mac test and this independent Android
-test therefore agree that the exposed service port produces no unsolicited
-controller stream with the aircraft off.
+bytes while the sticks moved. A follow-up claimed the advertised CDC control and
+data interfaces, applied only standard volatile 115,200/8-N-1 and DTR/RTS class
+requests, and then read the same bulk-IN endpoint. Android accepted the setup,
+but the 20-second moving-control capture again contained zero bytes. No data-OUT
+endpoint, vendor request, firmware command, or persistent-storage write was
+used. The earlier Mac test and both Android tests therefore agree that the
+exposed service port produces no usable controller stream with the aircraft off.
 
 ## Recovery-path findings
 

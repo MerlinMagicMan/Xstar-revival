@@ -27,9 +27,15 @@ internal enum class ControllerUsbStatus {
     OTHER_ACCESSORY
 }
 
+internal enum class ControllerUsbTransport {
+    ACCESSORY,
+    DIRECT_CDC
+}
+
 internal data class ControllerUsbUiState(
     val status: ControllerUsbStatus = ControllerUsbStatus.DISCONNECTED,
-    val identity: ControllerUsbIdentity? = null
+    val identity: ControllerUsbIdentity? = null,
+    val transport: ControllerUsbTransport? = null
 ) {
     val controllerDetected: Boolean
         get() = status == ControllerUsbStatus.XSTAR || status == ControllerUsbStatus.XSTAR_LEGACY
@@ -50,13 +56,31 @@ internal object ControllerUsbIdentityClassifier {
         devices: List<ControllerUsbIdentity> = emptyList()
     ): ControllerUsbUiState {
         val standard = accessories.firstOrNull { it in standardIdentities }
-        if (standard != null) return ControllerUsbUiState(ControllerUsbStatus.XSTAR, standard)
+        if (standard != null) {
+            return ControllerUsbUiState(
+                ControllerUsbStatus.XSTAR,
+                standard,
+                ControllerUsbTransport.ACCESSORY
+            )
+        }
 
         val legacy = accessories.firstOrNull { it == legacyXStarIdentity }
-        if (legacy != null) return ControllerUsbUiState(ControllerUsbStatus.XSTAR_LEGACY, legacy)
+        if (legacy != null) {
+            return ControllerUsbUiState(
+                ControllerUsbStatus.XSTAR_LEGACY,
+                legacy,
+                ControllerUsbTransport.ACCESSORY
+            )
+        }
 
         val direct = devices.firstOrNull { isDirectXStarDevice(it) }
-        if (direct != null) return ControllerUsbUiState(ControllerUsbStatus.XSTAR, direct)
+        if (direct != null) {
+            return ControllerUsbUiState(
+                ControllerUsbStatus.XSTAR,
+                direct,
+                ControllerUsbTransport.DIRECT_CDC
+            )
+        }
 
         val other = accessories.firstOrNull() ?: devices.firstOrNull()
         return if (other == null) {

@@ -128,7 +128,11 @@ inventory. Detection itself does not open the accessory or send control data. A 
 explicitly started controller-input lab may open
 only the accessory input descriptor for 20 seconds or 1 MB and save received bytes to private app
 cache; its compile-time audit rejects any USB output path. The current aircraft-off bench result is
-zero received bytes. The UI reports USB presence and input-stream availability separately so an
+zero received bytes. The exact direct USB identity `0x6175:0x5243` (`Autel / Remote Control / 2.00`)
+is also recognized. Its explicit lab check may issue only the two standard volatile CDC-ACM setup
+requests (115,200/8-N-1 and DTR/RTS), then reads only bulk-IN for the same 20-second/1 MB bound. It
+has no data-OUT endpoint, vendor request, firmware command, or persistent-storage write. The live
+aircraft-off capture remained exactly zero bytes after that setup. The UI reports USB presence and input-stream availability separately so an
 unavailable aircraft-relayed stick stream is not mislabeled as a failed controller. A separate
 bounded native-proxy experiment confirmed two-way controller USB keepalives, but the SDK's internal
 aircraft-side routes all timed out while the aircraft was unpowered; no controller framing is

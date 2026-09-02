@@ -47,6 +47,7 @@ import io.xstarrevival.app.TelemetrySource
 import io.xstarrevival.app.ControllerInputLinkStatus
 import io.xstarrevival.app.ControllerProbeUiState
 import io.xstarrevival.app.ControllerUsbStatus
+import io.xstarrevival.app.ControllerUsbTransport
 import io.xstarrevival.app.ControllerUsbUiState
 import io.xstarrevival.app.SimulatorControllerInputUiState
 import io.xstarrevival.app.SimulatorBridgeUiState
@@ -293,7 +294,11 @@ private fun RemoteSettings(
     GsSettingLine(
         "X-Star USB controller",
         when (controllerUsb.status) {
-            ControllerUsbStatus.XSTAR -> "CONNECTED"
+            ControllerUsbStatus.XSTAR -> if (controllerUsb.transport == ControllerUsbTransport.DIRECT_CDC) {
+                "CONNECTED · DIRECT USB"
+            } else {
+                "CONNECTED"
+            }
             ControllerUsbStatus.XSTAR_LEGACY -> "CONNECTED · LEGACY"
             ControllerUsbStatus.OTHER_ACCESSORY -> "OTHER ACCESSORY"
             ControllerUsbStatus.DISCONNECTED -> "DISCONNECTED"
@@ -341,8 +346,16 @@ private fun RemoteSettings(
         color = GsColors.Muted,
         fontSize = 10.sp
     )
-    if (!canCommand) Text("Controller writes remain disabled for receive-only hardware sources.", color = GsColors.Muted, fontSize = 10.sp)
-    Text("Passive X-Star check sends 0 bytes and stops after 20 seconds or 1 MB.", color = GsColors.Muted, fontSize = 10.sp)
+    if (!canCommand) Text("Aircraft commands remain disabled for hardware input checks.", color = GsColors.Muted, fontSize = 10.sp)
+    Text(
+        if (controllerUsb.transport == ControllerUsbTransport.DIRECT_CDC) {
+            "Direct USB uses only temporary 115200/8-N-1 + DTR/RTS setup, then reads IN only. No firmware or Autel command is written."
+        } else {
+            "Accessory input check sends 0 bytes."
+        } + " Stops after 20 seconds or 1 MB.",
+        color = GsColors.Muted,
+        fontSize = 10.sp
+    )
     if (!grounded) Text("Controller calibration requires the aircraft landed and disarmed.", color = GsColors.Amber, fontSize = 10.sp)
 }
 
