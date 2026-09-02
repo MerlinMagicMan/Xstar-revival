@@ -144,6 +144,23 @@ Public tools and analysis:
 
 The original component binaries remain private/proprietary artifacts; the hashes, analysis and reproducible tooling are public.
 
+## E.1 Remote-Controller Firmware Comparison Dataset
+
+The recovered aggregate packages also preserve two `RC-PRO` application images:
+
+```text
+X3P_RC_V1.0.0.37_20160406.bin
+SHA-256 998c8458678c9ff20432a6368e85b05c1f8fa970c4d37cf9277108cf94feec1a
+
+X3P_RC_V1.0.1.5_20170713.BIN
+SHA-256 ac490bc3c3ec48c23b7dd6910fcf7ae593dc3dbc71ee6e125174a3b3d8bf4bb4
+```
+
+Both use a validated `0xF0`-byte wrapper around a deterministic 16-byte-block
+payload. See `docs/REMOTE-CONTROLLER-FIRMWARE.md` and the read-only analyzer at
+`tools/firmware/analyze_rc_firmware.py`. The controller images remain private;
+only hashes, structural findings and tooling are public.
+
 ## F. User Manual / Official Documentation
 
 Preserved official manual:

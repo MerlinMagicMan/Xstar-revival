@@ -121,9 +121,11 @@ AUTEL_APP_KEY=your_registered_app_key \
 
 The live screen reports controller USB presence separately from SDK authorization and aircraft
 product discovery. In addition to Autel's `Starlink` and `Autel Explorer` accessory identities,
-the app narrowly recognizes the exact legacy `ammlab.org / HelloADK / 1.0` identity observed from
-an X-Star Premium controller. Detection only reads Android's accessory inventory; it does not open
-the accessory or send control data. A separate, explicitly started controller-input lab may open
+the app's Android accessory filter and runtime classifier narrowly recognize the exact legacy
+`ammlab.org / HelloADK / 1.0` identity observed from an X-Star Premium controller. This lets Android
+route the attach event and grant USB permission instead of merely showing the accessory in its
+inventory. Detection itself does not open the accessory or send control data. A separate,
+explicitly started controller-input lab may open
 only the accessory input descriptor for 20 seconds or 1 MB and save received bytes to private app
 cache; its compile-time audit rejects any USB output path. The current aircraft-off bench result is
 zero received bytes. The UI reports USB presence and input-stream availability separately so an
