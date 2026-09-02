@@ -136,7 +136,8 @@ The two callbacks lead to distinct transports:
 - Selector `0x81` wraps each 8-byte control event in an inner `0xFE` frame with
   a sequence/type field and CRC-16. It then adds an outer `0xA5`, channel 3,
   length and checksum frame. The transmit queue at `0x0802E56C` ultimately
-  writes the bytes to `0x40013804`, the STM32F1 USART1 data register.
+  writes the bytes to `0x40013804`, the STM32F1 USART1 data register. USART1 is
+  initialized at 115,200 baud on PA9/TX and PA10/RX.
 - Selector `0x210` wraps the variable-length flight-control data in an `0xAA`,
   channel 3, length and checksum frame. It places the result in a bounded
   128-byte buffer. The link state machine beginning at `0x08019204` drains that
@@ -144,6 +145,9 @@ The two callbacks lead to distinct transports:
   `0x080187D0` selects a transmit mailbox and writes the identifier, data length
   and two 32-bit payload words into the bxCAN transmit registers. The hard-coded
   peripheral base is `0x40006400`, identifying the physical endpoint as CAN1.
+  The firmware enables the CAN1 remap and configures PB8 as CAN_RX and PB9 as
+  CAN_TX. It writes CAN bit-timing value `0x00450002`. The startup clock code
+  runs the core at 72 MHz with a 36 MHz APB1 clock, making this a 1 Mbit/s bus.
 
 USART1 here is an internal MCU hardware path; this finding does not identify it
 as the Mac-visible Micro-USB port. The live Micro-USB CDC tests remain valid:
@@ -157,7 +161,8 @@ exhibit](https://fccid.io/2AGNTRC5809A/Internal-Photos/Int-Photos-2883859.pdf)
 shows the main processing assembly with its lower shield removed. The board
 legend visible in the exhibit is `EF3S_MAIN_HD_V7`. Three exposed round gold
 pads are visible along the left edge of that assembly, and multiple removable
-board connectors are present.
+board connectors are present. The office bench controller's rear label was
+confirmed to match FCC ID `2AGNTRC5809A` on 2026-09-02.
 
 Those photographs are a location guide, not a pinout. Their resolution does
 not establish which nets reach the three pads, whether a CAN transceiver sits
@@ -167,6 +172,14 @@ is available to resolve the nets. Before a passive capture, confirm that the
 physical controller carries FCC ID `2AGNTRC5809A` and the same board revision,
 then document both board faces sharply and identify ground and signal levels
 without injecting power or commands.
+
+For a passive button capture, PA9/TX plus ground is sufficient; do not connect
+to PA10/RX or transmit toward the controller. Confirm the voltage first and use
+a high-impedance receiver. For the stick stream, locate the CAN transceiver and
+capture CAN-H/CAN-L on its bus side with a galvanically isolated adapter in
+listen-only mode. Do not attach a USB CAN device directly to the MCU's PB8/PB9
+logic pins, and do not add termination until the existing bus resistance has
+been measured with the controller unpowered.
 
 The image also contains calibration handlers and strings for `CANMODE`,
 `RFMODE`, `DEBUGROCKER`, `DEBUGKEY`, `PhoneSet:CanMode`, `SIMULATED FLIGHT`,

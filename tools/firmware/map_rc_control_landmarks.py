@@ -66,6 +66,16 @@ KNOWN_PERIPHERALS = {
     ),
 }
 
+KNOWN_INTERFACES = {
+    "3a7180278ed9e4046ed57d188e09d5168ae8b61c29381c4d9869e83f258ae718": (
+        ("button_usart1", "tx=PA9\trx=PA10\tbaud=115200"),
+        (
+            "flight_can1",
+            "rx=PB8\ttx=PB9\tbitrate=1000000\tbtr=0x00450002",
+        ),
+    ),
+}
+
 
 def find_all(data: bytes, needle: bytes) -> list[int]:
     offsets: list[int] = []
@@ -131,6 +141,8 @@ def main() -> None:
             )
         for label, address in KNOWN_PERIPHERALS[digest]:
             print(f"peripheral={label}\taddress=0x{address:08X}")
+        for label, detail in KNOWN_INTERFACES[digest]:
+            print(f"interface={label}\t{detail}")
     else:
         print("known_image=UNKNOWN")
     for landmark in LANDMARKS:
