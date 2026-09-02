@@ -55,7 +55,11 @@ The factory controller presents an Android Open Accessory identity rather than a
 2. **Official SDK passive path** — the validated AAR exposes `setControlMenuListener(int[])` and navigation-button callbacks. The `int[]` layout is still intentionally opaque; a non-empty capture with one control moved at a time is required before mapping indices or ranges.
 3. **External USB-HID adapter** — if the controller will not expose inputs without an aircraft relay, use a removable microcontroller interface at a documented controller/trainer signal point. It should present a standard gamepad and must not inject signals into the controller radio path.
 
-No controller PCB trace should be cut and no firmware should be flashed until the HID and passive SDK routes are disproven. Existing live evidence shows that the native USB keepalive works but controller-upload callbacks produced no data with the aircraft powered off, which suggests the stick stream may depend on the aircraft-side relay.
+No controller PCB trace should be cut. Existing live evidence shows that the
+native USB keepalive works but controller-upload callbacks produced no data
+with the aircraft powered off, which suggests the stick stream may depend on
+the aircraft-side relay. No firmware should be flashed until its package
+integrity checks and a complete backup/recovery route are proven.
 
 The 2026-09-02 office retest closed the remaining software-only gaps. Android successfully matched
 and granted permission for the controller's exact `ammlab.org / HelloADK / 1.0` accessory identity.
@@ -73,13 +77,11 @@ maps the selector/photo/record/knob/settings controls, and builds control
 messages through one common dispatcher. It also preserves a simulated-flight
 UI. The discrete-control stream is now traced through framed messages to the
 MCU's internal USART1 path. The stick stream is traced through an `0xAA` frame,
-a bounded buffer and 8-byte frames to the MCU's bxCAN1 peripheral. The next
-experiment is a receive-only trace at the USART1 and CAN1 board connections,
-after confirming their voltage levels and adding appropriate isolation. If
-either path can be exposed safely through an existing board connection, no
-controller firmware modification or external stick adapter is needed. See
-`REMOTE-CONTROLLER-FIRMWARE.md` for the reproducible address map, the matching
-FCC internal-board photographs and the limits of this finding.
+a bounded buffer and 8-byte frames to the MCU's bxCAN1 peripheral. These two
+known stock paths support either a later passive board trace or the selected
+software-only rerouting experiment. See `REMOTE-CONTROLLER-FIRMWARE.md` for the
+reproducible address map, the matching FCC internal-board photographs and the
+limits of this finding.
 
 Static pin initialization narrows the passive targets further. The discrete
 control stream uses USART1 at 115,200 baud on PA9/TX and PA10/RX; a receive-only
@@ -87,6 +89,17 @@ capture needs PA9 and ground only. The stick stream uses remapped CAN1 on
 PB8/RX and PB9/TX at 1 Mbit/s. Capture that stream from CAN-H/CAN-L after its
 transceiver, using an isolated adapter in listen-only mode. MCU logic pins must
 not be connected directly to a USB CAN adapter.
+
+The selected next route is software-only and does not require opening the
+controller. A hash-locked offline patcher now replaces only the stock stick
+callback: it builds the same bounded `0xAA` frame, sends that frame through the
+existing USART1 framed-data routine, and deliberately leaves the aircraft CAN
+stick queue inactive. The controller's normal button callback is unchanged.
+This produces a decoded research image only; it cannot be installed until the
+RC-PRO wrapper check and a controller backup/recovery procedure are solved.
+Once those safeguards exist, the first live question is whether the separate
+USB/video processor forwards the rerouted bytes to the Android accessory link.
+See `REMOTE-CONTROLLER-FIRMWARE.md` for the exact patch boundary and checks.
 
 ## Coverage and remaining boundary
 

@@ -10,6 +10,7 @@ firmware update. Use decode_rc_firmware.py for validated offline decoding.
 from __future__ import annotations
 
 import argparse
+import binascii
 import hashlib
 import math
 import struct
@@ -101,6 +102,7 @@ def describe(image: RcImage) -> None:
 
     print(f"file={image.path}")
     print(f"sha256={hashlib.sha256(image.data).hexdigest()}")
+    print(f"component_jamcrc=0x{(~binascii.crc32(image.data) & 0xFFFFFFFF):08X}")
     print(f"size={len(image.data)}")
     print(f"header_size=0x{HEADER_SIZE:X}")
     print(f"product={image.product}")
