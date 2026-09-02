@@ -108,6 +108,8 @@ if USB_PROBE.is_file():
     forbidden_usb_output = (
         "FileOutputStream",
         "OutputStream",
+        "USB_DIR_OUT",
+        "controlTransfer",
         "sendCommand",
         "writeUsbData",
     )
@@ -118,6 +120,12 @@ if USB_PROBE.is_file():
         print(
             "Receive-only USB probe references output operations: "
             + ", ".join(output_references),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if "bulkTransfer" in usb_source and "UsbConstants.USB_DIR_IN" not in usb_source:
+        print(
+            "Receive-only USB bulk transfer is not guarded by an IN endpoint check",
             file=sys.stderr,
         )
         raise SystemExit(1)

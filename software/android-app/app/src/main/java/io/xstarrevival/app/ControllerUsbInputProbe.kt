@@ -1,6 +1,13 @@
 package io.xstarrevival.app
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -95,6 +102,7 @@ internal class ControllerUsbInputProbe(
     private val requestedStop = AtomicReference<ControllerProbeStopReason?>(null)
     private val descriptorLock = Any()
     private var descriptor: ParcelFileDescriptor? = null
+    private var deviceConnection: UsbDeviceConnection? = null
     private var captureJob: Job? = null
     private var timeoutJob: Job? = null
 
@@ -109,10 +117,23 @@ internal class ControllerUsbInputProbe(
                 listOf(candidate.toControllerUsbIdentity())
             ).controllerDetected
         }
-        if (accessory == null) {
-            fail("No recognized X-Star controller accessory is attached")
+        if (accessory != null) {
+            startAccessory(accessory)
             return
         }
+
+        val device = usbManager.deviceList.values.firstOrNull { candidate ->
+            ControllerUsbIdentityClassifier.isDirectXStarDevice(candidate.toControllerUsbIdentity())
+        }
+        if (device != null) {
+            startDirectDevice(device)
+            return
+        }
+
+        fail("No recognized X-Star controller USB connection is attached")
+    }
+
+    private fun startAccessory(accessory: android.hardware.usb.UsbAccessory) {
         if (!usbManager.hasPermission(accessory)) {
             fail("Android has not granted accessory permission")
             return
@@ -126,7 +147,72 @@ internal class ControllerUsbInputProbe(
         requestedStop.set(null)
         synchronized(descriptorLock) { descriptor = opened }
         mutableState.value = ControllerProbeUiState(status = ControllerProbeStatus.READING)
-        captureJob = scope.launch(Dispatchers.IO) { record(opened) }
+        captureJob = scope.launch(Dispatchers.IO) {
+            try {
+                FileInputStream(opened.fileDescriptor).use { usbInput ->
+                    recordIncoming { buffer -> usbInput.read(buffer) }
+                }
+            } finally {
+                closeDescriptor(opened)
+            }
+        }
+        startTimeout()
+    }
+
+    private fun startDirectDevice(device: UsbDevice) {
+        if (!usbManager.hasPermission(device)) {
+            val permissionIntent = PendingIntent.getBroadcast(
+                applicationContext,
+                0,
+                Intent(ACTION_USB_PERMISSION).setPackage(applicationContext.packageName),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            runCatching { usbManager.requestPermission(device, permissionIntent) }
+                .onFailure { fail("Android could not request controller USB permission") }
+            if (mutableState.value.status != ControllerProbeStatus.ERROR) {
+                fail("Allow controller access, then tap the check button again")
+            }
+            return
+        }
+
+        val receiveTarget = findReceiveTarget(device)
+        if (receiveTarget == null) {
+            fail("The controller has no receive-only USB endpoint")
+            return
+        }
+        val connection = usbManager.openDevice(device)
+        if (connection == null) {
+            fail("Android could not open the controller USB device")
+            return
+        }
+        if (!connection.claimInterface(receiveTarget.usbInterface, true)) {
+            connection.close()
+            fail("Android could not claim the controller receive interface")
+            return
+        }
+
+        requestedStop.set(null)
+        synchronized(descriptorLock) { deviceConnection = connection }
+        mutableState.value = ControllerProbeUiState(status = ControllerProbeStatus.READING)
+        captureJob = scope.launch(Dispatchers.IO) {
+            try {
+                recordIncoming { buffer ->
+                    val count = connection.bulkTransfer(
+                        receiveTarget.endpoint,
+                        buffer,
+                        buffer.size,
+                        DIRECT_USB_READ_TIMEOUT_MS
+                    )
+                    if (count < 0 && requestedStop.get() == null) 0 else count
+                }
+            } finally {
+                closeDeviceConnection(connection, receiveTarget.usbInterface)
+            }
+        }
+        startTimeout()
+    }
+
+    private fun startTimeout() {
         timeoutJob = scope.launch {
             delay(MAX_CAPTURE_DURATION_MS)
             stop(ControllerProbeStopReason.DURATION_LIMIT)
@@ -140,10 +226,12 @@ internal class ControllerUsbInputProbe(
         synchronized(descriptorLock) {
             runCatching { descriptor?.close() }
             descriptor = null
+            runCatching { deviceConnection?.close() }
+            deviceConnection = null
         }
     }
 
-    private fun record(opened: ParcelFileDescriptor) {
+    private fun recordIncoming(readChunk: (ByteArray) -> Int) {
         pruneOldCaptures()
         val captureFile = File(captureDirectory, "${captureId()}.bin")
         val startedAt = elapsedRealtimeMs()
@@ -162,53 +250,56 @@ internal class ControllerUsbInputProbe(
         val frameDecoder = RcSimulatorAccessoryDecoder()
 
         try {
-            FileInputStream(opened.fileDescriptor).use { usbInput ->
-                ControllerProbeCaptureSink(captureFile, MAX_CAPTURE_BYTES).use { captureSink ->
-                    val buffer = ByteArray(READ_BUFFER_BYTES)
-                    while (true) {
-                        val count = usbInput.read(buffer)
-                        if (count < 0) {
-                            reason = ControllerProbeStopReason.END_OF_STREAM
-                            break
+            ControllerProbeCaptureSink(captureFile, MAX_CAPTURE_BYTES).use { captureSink ->
+                val buffer = ByteArray(READ_BUFFER_BYTES)
+                while (true) {
+                    val requestedReason = requestedStop.get()
+                    if (requestedReason != null) {
+                        reason = requestedReason
+                        break
+                    }
+                    val count = readChunk(buffer)
+                    if (count < 0) {
+                        reason = ControllerProbeStopReason.END_OF_STREAM
+                        break
+                    }
+                    if (count == 0) continue
+                    val keep = captureSink.append(buffer, count)
+                    if (keep > 0) {
+                        bytesRead = captureSink.bytesWritten
+                        chunksRead++
+                        lastHex = buffer.copyOfRange(0, minOf(keep, HEX_PREVIEW_BYTES)).toHex()
+                        val accessoryFrames = frameDecoder.appendFrames(buffer, keep)
+                        val stickFrames = accessoryFrames.filterIsInstance<RcSimulatorStickFrame>()
+                        val buttonFrames = accessoryFrames.filterIsInstance<RcSimulatorButtonFrame>()
+                        stickFramesRead += stickFrames.size
+                        lastStickAxes = stickFrames.lastOrNull()?.normalizedAxes ?: lastStickAxes
+                        buttonFramesRead += buttonFrames.size
+                        buttonFrames.lastOrNull()?.let { button ->
+                            lastButtonEventId = button.eventId
+                            lastButtonStateValue = button.stateValue
+                            lastButtonName = button.controlName
                         }
-                        if (count == 0) continue
-                        val keep = captureSink.append(buffer, count)
-                        if (keep > 0) {
-                            bytesRead = captureSink.bytesWritten
-                            chunksRead++
-                            lastHex = buffer.copyOfRange(0, minOf(keep, HEX_PREVIEW_BYTES)).toHex()
-                            val accessoryFrames = frameDecoder.appendFrames(buffer, keep)
-                            val stickFrames = accessoryFrames.filterIsInstance<RcSimulatorStickFrame>()
-                            val buttonFrames = accessoryFrames.filterIsInstance<RcSimulatorButtonFrame>()
-                            stickFramesRead += stickFrames.size
-                            lastStickAxes = stickFrames.lastOrNull()?.normalizedAxes ?: lastStickAxes
-                            buttonFramesRead += buttonFrames.size
-                            buttonFrames.lastOrNull()?.let { button ->
-                                lastButtonEventId = button.eventId
-                                lastButtonStateValue = button.stateValue
-                                lastButtonName = button.controlName
-                            }
-                            val now = elapsedRealtimeMs()
-                            if (now - lastPublishedAt >= UI_UPDATE_INTERVAL_MS) {
-                                publish(
-                                    bytesRead,
-                                    chunksRead,
-                                    now - startedAt,
-                                    lastHex,
-                                    stickFramesRead,
-                                    lastStickAxes,
-                                    buttonFramesRead,
-                                    lastButtonEventId,
-                                    lastButtonStateValue,
-                                    lastButtonName
-                                )
-                                lastPublishedAt = now
-                            }
+                        val now = elapsedRealtimeMs()
+                        if (now - lastPublishedAt >= UI_UPDATE_INTERVAL_MS) {
+                            publish(
+                                bytesRead,
+                                chunksRead,
+                                now - startedAt,
+                                lastHex,
+                                stickFramesRead,
+                                lastStickAxes,
+                                buttonFramesRead,
+                                lastButtonEventId,
+                                lastButtonStateValue,
+                                lastButtonName
+                            )
+                            lastPublishedAt = now
                         }
-                        if (keep < count || bytesRead >= MAX_CAPTURE_BYTES) {
-                            reason = ControllerProbeStopReason.SIZE_LIMIT
-                            break
-                        }
+                    }
+                    if (keep < count || bytesRead >= MAX_CAPTURE_BYTES) {
+                        reason = ControllerProbeStopReason.SIZE_LIMIT
+                        break
                     }
                 }
             }
@@ -224,7 +315,6 @@ internal class ControllerUsbInputProbe(
         } finally {
             timeoutJob?.cancel()
             timeoutJob = null
-            closeDescriptor(opened)
             captureJob = null
             val finalReason = requestedStop.get() ?: reason ?: ControllerProbeStopReason.END_OF_STREAM
             val elapsed = (elapsedRealtimeMs() - startedAt).coerceAtLeast(0)
@@ -290,6 +380,30 @@ internal class ControllerUsbInputProbe(
         }
     }
 
+    private fun closeDeviceConnection(connection: UsbDeviceConnection, usbInterface: UsbInterface) {
+        synchronized(descriptorLock) {
+            runCatching { connection.releaseInterface(usbInterface) }
+            runCatching { connection.close() }
+            if (deviceConnection === connection) deviceConnection = null
+        }
+    }
+
+    private fun findReceiveTarget(device: UsbDevice): DirectUsbReceiveTarget? {
+        for (interfaceIndex in 0 until device.interfaceCount) {
+            val candidate = device.getInterface(interfaceIndex)
+            if (candidate.interfaceClass != UsbConstants.USB_CLASS_CDC_DATA) continue
+            for (endpointIndex in 0 until candidate.endpointCount) {
+                val endpoint = candidate.getEndpoint(endpointIndex)
+                if (endpoint.direction == UsbConstants.USB_DIR_IN &&
+                    endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK
+                ) {
+                    return DirectUsbReceiveTarget(candidate, endpoint)
+                }
+            }
+        }
+        return null
+    }
+
     private fun pruneOldCaptures() {
         captureDirectory.listFiles()
             ?.filter { it.isFile }
@@ -308,6 +422,7 @@ internal class ControllerUsbInputProbe(
     private fun ByteArray.toHex(): String = joinToString(" ") { "%02X".format(it) }
 
     private companion object {
+        const val ACTION_USB_PERMISSION = "io.xstarrevival.app.USB_CONTROLLER_PERMISSION"
         const val CAPTURE_DIRECTORY = "captures/controller-probes"
         const val MAX_CAPTURE_DURATION_MS = 20_000L
         const val MAX_CAPTURE_BYTES = 1024L * 1024L
@@ -315,5 +430,11 @@ internal class ControllerUsbInputProbe(
         const val READ_BUFFER_BYTES = 16 * 1024
         const val HEX_PREVIEW_BYTES = 24
         const val UI_UPDATE_INTERVAL_MS = 100L
+        const val DIRECT_USB_READ_TIMEOUT_MS = 250
     }
 }
+
+private data class DirectUsbReceiveTarget(
+    val usbInterface: UsbInterface,
+    val endpoint: UsbEndpoint
+)

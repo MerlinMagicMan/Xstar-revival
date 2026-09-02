@@ -291,7 +291,7 @@ private fun RemoteSettings(
     GsSettingLine("Last simulator button", simulatorControllerInput.lastAction?.name?.replace('_', ' ') ?: "—")
     val probeLink = controllerInputLinkStatus(controllerUsb, controllerProbe)
     GsSettingLine(
-        "X-Star USB accessory",
+        "X-Star USB controller",
         when (controllerUsb.status) {
             ControllerUsbStatus.XSTAR -> "CONNECTED"
             ControllerUsbStatus.XSTAR_LEGACY -> "CONNECTED · LEGACY"

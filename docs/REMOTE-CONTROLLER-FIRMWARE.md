@@ -257,8 +257,13 @@ The two callbacks lead to distinct transports:
   runs the core at 72 MHz with a 36 MHz APB1 clock, making this a 1 Mbit/s bus.
 
 USART1 here is an internal MCU hardware path; this finding does not identify it
-as the Mac-visible Micro-USB port. The live Micro-USB CDC tests remain valid:
-that exposed service port produced no controller stream with the aircraft off.
+as the Mac- or Android-visible Micro-USB port. Android identifies that interface
+as `0x6175:0x5243` (`Autel / Remote Control / 2.00`) with a 64-byte bulk-IN
+endpoint. A bounded app capture claimed only the CDC-data interface and read
+only that IN endpoint, with no control or OUT transfer. It received exactly zero
+bytes while the sticks moved. The earlier Mac test and this independent Android
+test therefore agree that the exposed service port produces no unsolicited
+controller stream with the aircraft off.
 
 ## Recovery-path findings
 

@@ -61,12 +61,15 @@ with the aircraft powered off, which suggests the stick stream may depend on
 the aircraft-side relay. No firmware should be flashed until its package
 integrity checks and a complete backup/recovery route are proven.
 
-The 2026-09-02 office retest closed the remaining software-only gaps. Android successfully matched
+The 2026-09-02 office retest closed the remaining zero-transmit software-only gaps. Android successfully matched
 and granted permission for the controller's exact `ammlab.org / HelloADK / 1.0` accessory identity.
 Two new bounded receive-only captures remained exactly zero bytes while the left stick moved through
 full travel. The only older non-empty raw capture contained seven identical native keepalive replies
-and no additional payload. The controller's reserved Micro-USB CDC service port also emitted no
-startup or stick data. With no aircraft available, the standard accessory path, official SDK upload
+and no additional payload. The controller's Micro-USB CDC interface was then identified exactly as
+vendor/product `0x6175:0x5243` (`Autel / Remote Control / 2.00`). The app was extended to request Android
+permission, claim only its CDC-data interface, and read only its bulk-IN endpoint. A live capture with
+the sticks moving again remained exactly zero bytes; the reader issued no USB control transfer and had
+no OUT endpoint path. With no aircraft available, the standard accessory path, official SDK upload
 path, and reserved service port therefore expose no usable control stream. Route 3 remains the
 proven aircraft-off fallback; its electrical attachment must remain
 removable and isolated from the controller radio/flight-command path.
@@ -121,7 +124,7 @@ live press/release semantics remain intentionally unassigned.
 
 The production ground-station screen exposes this bounded receive-only check at
 **Settings → Remote Controller → Check X-Star Sticks & Buttons** when Flight
-Simulator or Live X-Star is selected. It reports the USB accessory and
+Simulator or Live X-Star is selected. It reports the recognized USB controller and
 validated input stream separately, sends zero bytes, and cannot route any event
 to the live aircraft transport.
 

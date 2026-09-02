@@ -321,13 +321,13 @@ private fun controllerInputLinkMessage(
     probe: ControllerProbeUiState
 ): String = when (status) {
     ControllerInputLinkStatus.DISCONNECTED -> "Connect the controller to check its input stream."
-    ControllerInputLinkStatus.USB_READY -> "USB accessory is connected; stick-data stream has not been checked."
+    ControllerInputLinkStatus.USB_READY -> "USB controller is connected; stick-data stream has not been checked."
     ControllerInputLinkStatus.LISTENING ->
         "Checking input stream · ${probe.elapsedMs / 1000}s"
     ControllerInputLinkStatus.STREAMING ->
         "Input stream active · ${probe.bytesRead.formatBytes()} · ${probe.chunksRead} chunks"
     ControllerInputLinkStatus.INPUT_STREAM_UNAVAILABLE ->
-        "USB accessory connected · controller input stream unavailable"
+        "USB controller connected · controller input stream unavailable"
     ControllerInputLinkStatus.ERROR -> "Input check error · ${probe.error ?: "unknown"}"
 }.let { message ->
     if (controllerUsb.status == ControllerUsbStatus.XSTAR_LEGACY &&
