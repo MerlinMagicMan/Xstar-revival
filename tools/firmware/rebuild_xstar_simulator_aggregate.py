@@ -139,7 +139,8 @@ def main() -> int:
     print("component_md5_verification=ALL_MATCH")
     print("manifest_length=MATCH_STOCK")
     print("aggregate_length=MATCH_STOCK")
-    print("aggregate_header_integrity=UNRESOLVED")
+    print("aggregate_header_field_0x07=OPAQUE_PRESERVED")
+    print("aggregate_header_semantics=PARTIAL")
     print("artifact=OFFLINE_AGGREGATE_RESEARCH_IMAGE")
     print("controller_write=NONE")
     return 0

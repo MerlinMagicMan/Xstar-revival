@@ -27,7 +27,7 @@ offset  size  observed meaning
 0x00    4     02 AA 55 AA magic
 0x1C    4     version, little-endian packed as V1.0.1.5
 0x20    4     unpadded inner-payload length
-0x24    4     integrity/check field; algorithm not yet identified
+0x24    4     STM32 non-reflected word CRC-32 of decoded payload
 0x28    4     target value 7 in both recovered images
 0x2C    4     duplicate version field
 0x30    ...   NUL-terminated product tag "RC-PRO"
@@ -85,6 +85,40 @@ reproduces `0xC340559D` for V1.0.0.37 and `0x1B6C66B4` for V1.0.1.5. The wrapper
 own check word at offset `0x24` can therefore be rebuilt after an offline
 application change.
 
+## Aggregate header comparison
+
+The two recovered aggregate generations make several decoded header fields
+reproducible rather than speculative:
+
+| Offset | V1.1.3 | V2.0.12 | Supported interpretation |
+|---:|---:|---:|---|
+| `0x00` | `AT` | `AT` | aggregate magic |
+| `0x07` | `FC C2 86 09` | `B0 1A D1 0D` | opaque four-byte package field |
+| `0x0B` | `60,760,988` | `59,778,215` | exact total aggregate byte length |
+| `0x13` | `0x570899A4` | `0x59CC4C99` | Unix build timestamp |
+| `0x17` | `2` | `2` | constant field; meaning not assigned |
+| `0x1B` | `X-Star Premium` | `X-Star Premium` | product string |
+| `0x5B` | `Autel Robotics Co.,Ltd.` | same | vendor string |
+| `0x101` | `B1 C0` | `B1 C0` | pre-manifest marker |
+| `0x103` | `0x0BAC` | `0x10B7` | exact JSON manifest length |
+
+The timestamps decode to 2016-04-09 05:56:52 UTC and 2017-09-28 01:12:57
+UTC. Conventional CRC-32, JAMCRC, Adler-32, STM32 word CRC, digest fragments,
+word sums and component-field reductions did not reproduce the two values at
+`0x07`. There is consequently no evidence that this field is an integrity
+check. The aggregate rebuilder preserves it byte-for-byte and labels it
+**opaque**, without assigning security or update semantics.
+
+Reproduce the structured header comparison without extracting or modifying the
+package:
+
+```bash
+python tools/firmware/analyze_xstar_aggregate_header.py \
+  X3P_FW_900M_V1.1.3.bin
+python tools/firmware/analyze_xstar_aggregate_header.py \
+  X3P_FW_900M_V2.0.12.bin
+```
+
 ## Reproducing the result
 
 After extracting both aggregate packages into private directories, inspect the
@@ -111,7 +145,14 @@ python tools/firmware/map_rc_control_landmarks.py \
   X3P_RC_V1.0.1.5.decoded.bin
 ```
 
-The analyzer, decoder and landmark mapper operate only on local files. The
+Verify the recovery-relevant application, flash and GM8136 landmarks:
+
+```bash
+python tools/firmware/map_rc_recovery_landmarks.py \
+  X3P_RC_V1.0.1.5.decoded.bin
+```
+
+The analyzer, decoder and landmark mappers operate only on local files. The
 decoder refuses to overwrite an output and writes it only after the plaintext
 passes padding and STM32 vector-table checks. None of these tools opens a USB
 device, sends a controller command or performs a firmware update.
@@ -150,9 +191,9 @@ CRC and performs a complete encryption/decryption round trip. Its output is
 then accepted by `tools/firmware/rebuild_xstar_simulator_aggregate.py`, which
 replaces only component type 8 in the exact preserved V2.0.12 aggregate and
 updates its manifest MD5 and JAMCRC. A complete re-extraction verifies all 17
-component MD5 values. The aggregate header's unlabelled four-byte field at
-offset `0x07` remains unresolved and is preserved, so the aggregate remains a
-research artifact rather than an approved update. A tested controller
+component MD5 values. The aggregate header's opaque four-byte field at offset
+`0x07` is preserved, so the aggregate remains a research artifact rather than
+an approved update. A tested controller
 backup/recovery path is also not yet available. The separate USB/video
 processor still has to be tested to determine whether it forwards the new
 USART1 payload to Android.
@@ -219,6 +260,42 @@ USART1 here is an internal MCU hardware path; this finding does not identify it
 as the Mac-visible Micro-USB port. The live Micro-USB CDC tests remain valid:
 that exposed service port produced no controller stream with the aircraft off.
 
+## Recovery-path findings
+
+The V1.0.1.5 image now provides three independently checkable architectural
+boundaries:
+
+1. The packaged component begins with an application vector table for
+   `0x08013000`; it contains no bytes for the preceding `0x13000`-byte STM32
+   flash span.
+2. Startup code disables interrupts and writes `0x08013000` to the Cortex-M
+   System Control Block VTOR register at `0xE000ED08`, then enables interrupts
+   and initializes the application. This confirms the link/run address in
+   executable code.
+3. The application's verified direct flash-program call paths target
+   `0x08012800` and `0x0807F800`, both outside the packaged application range.
+   No direct application self-reflash path was found in that map.
+
+The image also registers callback `0x08033FF8`. It accepts device selector 7
+and an exact ten-byte payload, parses request/device/status/percent/retry/version
+fields and logs `GM8136 UPGRADE PARSE`. This establishes that the STM32
+application receives upgrade progress from the controller's GM8136-side
+processor. It does not establish which processor owns the loader or prove that
+either processor can restore a damaged STM32 application.
+
+These findings reduce the risk of an application-only update overwriting every
+loader-related byte, but they are not a recovery procedure. The absent
+pre-application flash span could contain a bootloader, protected configuration,
+or both; its contents and behavior have not been read back. The tool reports
+`bootloader_recovery_path=NOT_PROVEN` for that reason.
+
+Autel's documented stock workflow reinforces the architectural separation:
+the all-in-one package is placed on the camera SD card, the aircraft and remote
+controller are powered together, and the aircraft distributes the component
+updates. See the [X-Star user manual](https://fcc.report/FCC-ID/2AGNTRC5809A/2883864.pdf)
+and the [official X-Star downloads page](https://shop.autelrobotics.com/pages/x-star-downloads).
+The controller alone at the office cannot exercise that intended update path.
+
 ## Controller-board evidence
 
 The controller's FCC filing is [2AGNTRC5809A, model
@@ -262,8 +339,8 @@ research. The software-only route now changes the priorities to:
 
 1. retain the byte-for-byte verified callback replacement and hash-locked
    component/aggregate rebuilders as offline-only tools;
-2. resolve the aggregate header field at offset `0x07` and document a full
-   backup/recovery procedure before any controller write;
+2. retain the aggregate header field at offset `0x07` as opaque and preserved,
+   and document a full backup/recovery procedure before any controller write;
 3. only after those safeguards, test whether the controller's separate
    USB/video processor forwards the rerouted USART1 stick frames to Android;
 4. capture one control at a time and map all axis ranges, centers, directions
@@ -271,9 +348,10 @@ research. The software-only route now changes the priorities to:
 5. translate the observed frames into the simulator input model while retaining
    the external isolated adapter as a fallback.
 
-The offline modification is safe to construct and inspect, but bootloader and
-recovery characterization, a full backup path and a reversible bench procedure
-remain prerequisites before any write to the physical controller.
+The offline modification is safe to construct and inspect. A readback of the
+pre-application flash span, loader/recovery characterization, and a reversible
+bench procedure remain prerequisites before any write to the physical
+controller.
 
 ## Optional hardware evidence route
 

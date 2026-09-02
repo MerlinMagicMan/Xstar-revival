@@ -78,6 +78,23 @@ file-size
 
 Again, this is download/version metadata handling rather than component cryptography.
 
+`AutelFlyFirmwareUpdrageActivity` displays the server-provided version, file
+size, summary and download address. No call in this activity was found that
+applies an aggregate package to a controller or transforms a component payload.
+
+## Documented update owner
+
+Autel's documented X-Star update procedure places the all-in-one `.bin` on the
+camera SD card, powers the aircraft and remote controller together, and lets
+the aircraft distribute updates to its components and the controller. The app
+shows status, but it is not the package consumer in that workflow. See the
+[X-Star user manual](https://fcc.report/FCC-ID/2AGNTRC5809A/2883864.pdf) and
+[official X-Star downloads page](https://shop.autelrobotics.com/pages/x-star-downloads).
+
+This means the intended controller-update transport cannot be exercised with
+only the controller connected to the Mac. Direct USB discovery and the APK's
+metadata/download path do not substitute for the aircraft-mediated loader.
+
 ## Implication for Battery V5.21 / V6.07
 
 The Battery component payloads are already transformed when embedded in the aggregate `.bin`. Because the Android updater path does not currently show a corresponding battery-specific decrypt/transform call, the repeating-XOR decoding discovered independently is more likely to be reversed/applied by:

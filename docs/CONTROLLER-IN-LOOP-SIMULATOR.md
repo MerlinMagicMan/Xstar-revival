@@ -97,10 +97,14 @@ existing USART1 framed-data routine, and deliberately leaves the aircraft CAN
 stick queue inactive. The controller's normal button callback is unchanged.
 The RC-PRO wrapper check is now solved, and exact-hash rebuilders produce both
 the replacement component and a structurally complete aggregate package. A
-full offline re-extraction verifies every component MD5, but the aggregate
-header field at offset `0x07` remains unlabelled and no controller
-backup/recovery procedure has been proven. The research package therefore must
-not be installed. Once those safeguards exist, the first live question is
+full offline re-extraction verifies every component MD5. The aggregate header
+field at offset `0x07` remains opaque and is preserved byte-for-byte; it has not
+been shown to be an integrity field. Static recovery mapping confirms that the
+packaged STM32 application starts at `0x08013000`, receives GM8136 upgrade
+status, and directly programs only two addresses outside its packaged range.
+It still does not provide a controller readback or prove loader recovery, so
+the research package must not be installed. Once those safeguards exist, the
+first live question is
 whether the separate USB/video processor forwards the rerouted bytes to the
 Android accessory link. See `REMOTE-CONTROLLER-FIRMWARE.md` for the exact patch
 boundary and checks.
